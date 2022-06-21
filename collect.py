@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 from datetime import datetime
 
@@ -6,15 +7,32 @@ from Cptool.config import toolConfig
 from Cptool.mavlink import FixMavlink, DroneMavlink
 from Cptool.simManager import FixSimManager
 
+
+def least():
+    log_index = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/LASTLOG.TXT"
+    with open(log_index, 'r') as f:
+        i = int(f.readline())
+    return i
+
+
 if __name__ == '__main__':
+    # Create txt if not exists
+    log_index = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/LASTLOG.TXT"
+    if not os.path.exists(log_index):
+        with open(log_index, "w") as f:
+            f.write('0')
+
     manager = FixSimManager(debug=toolConfig.DEBUG)
 
     time.sleep(1)
-    i = 0
-    while True:
-        time.sleep(1)
+    while least() < 500:
+        time.sleep(0.5)
+        log_index = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/LASTLOG.TXT"
+        if os.path.exists(log_index):
+            with open(log_index, 'r') as f:
+                num = int(f.readline())
         print('--------------------------------------------------------------------------------------------------')
-        print(f'--------- {datetime.now()} === {i}----------------------')
+        print(f'--------- {datetime.now()} === lastindex: {num}----------------------')
         print('--------------------------------------------------------------------------------------------------')
 
         manager.start_sitl()
@@ -36,4 +54,3 @@ if __name__ == '__main__':
         if not result:
             # Delete current log
             DroneMavlink.delete_current_log()
-        i += 1

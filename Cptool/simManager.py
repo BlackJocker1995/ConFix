@@ -105,18 +105,18 @@ class SimManager(object):
         初始化SITL在环
         :return:
         """
-        if toolConfig.MODE == 'Ardupilot':
-            while True:
-                line = self._sitl_task.readline()
-                if "IMU0 is using GPS" in line:
-                    break
-                # if line.startswith('APM: GPS 1: detected as'):
-                #     break
-        elif toolConfig.MODE == 'PX4':
-            while True:
-                line = self._sitl_task.readline()
-                if 'notify negative' in line:
-                    break
+        # if toolConfig.MODE == 'Ardupilot':
+        #     while True:
+        #         line = self._sitl_task.readline()
+        #         if "IMU0 is using GPS" in line:
+        #             break
+        #         # if line.startswith('APM: GPS 1: detected as'):
+        #         #     break
+        # elif toolConfig.MODE == 'PX4':
+        #     while True:
+        #         line = self._sitl_task.readline()
+        #         if 'notify negative' in line:
+        #             break
         self.mav_monitor = mavlink_class(14540, recv_msg_queue=self.sim_msg_queue, send_msg_queue=self.mav_msg_queue)
 
     def mav_monitor_connect(self):

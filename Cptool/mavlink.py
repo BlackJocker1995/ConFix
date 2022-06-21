@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 import multiprocessing
 import os
 import random
@@ -10,10 +11,14 @@ import numpy as np
 import pandas as pd
 import ray
 from pymavlink import mavutil, mavwp
+from pymavlink.DFReader import DFMessage
 from pymavlink.mavutil import mavserial
 from pyulog import ULog
+from tqdm import tqdm
 
 from Cptool.config import toolConfig
+from ModelFit.approximate import Modeling, CyLSTM
+from ModelFit.config import modelConfig
 
 
 class DroneMavlink(multiprocessing.Process):
@@ -126,6 +131,17 @@ class DroneMavlink(multiprocessing.Process):
                 break
         return message['param_value']
 
+    def get_params(self, params: list) -> dict:
+        """
+        get current value of a parameters.
+        :param params:
+        :return: value of parameter
+        """
+        out_dict = {}
+        for param in params:
+            out_dict[param] = self.get_param(param)
+        return out_dict
+
     def get_msg(self, type, block=False):
         """
         receive the mavlink message
@@ -136,7 +152,7 @@ class DroneMavlink(multiprocessing.Process):
         msg = self._master.recv_match(type=type, blocking=block)
         return msg
 
-    def set_mode(self, mode:str):
+    def set_mode(self, mode: str):
         """
         Set flight mode
         :param mode: string type of a mode, it will be convert to an int values.
@@ -162,6 +178,19 @@ class DroneMavlink(multiprocessing.Process):
         # Unlock the uav
         self.start_mission()
 
+    def read_status(self, status):
+        out_status = dict()
+        local_status = status
+        while len(local_status) != 0:
+            msg = self._master.recv_match(type=status, blocking=True)
+            msg = msg.to_dict()
+            local_status.remove(msg["mavpackettype"])
+            out_status[msg["mavpackettype"]] = msg
+        return out_status
+
+    def wait_complete(self):
+        pass
+
     @staticmethod
     def create_random_params(param_choice):
         para_dict = DroneMavlink.load_param()
@@ -170,21 +199,28 @@ class DroneMavlink(multiprocessing.Process):
 
         out_dict = {}
         for key, param_range in param_choice_dict.items():
-            value = round(random.uniform(param_range['range'][0], param_range['range'][1]) / param_range['step']) * param_range['step']
+            value = round(random.uniform(param_range['range'][0], param_range['range'][1]) / param_range['step']) * \
+                    param_range['step']
             out_dict[key] = value
         return out_dict
 
     @staticmethod
     def delete_current_log():
         log_index = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/LASTLOG.TXT"
+
+        # Read last index
         with open(log_index, 'r') as f:
             num = int(f.readline())
+        # To string
         num = f'{num}'
-        log_file = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/{num.rjust(8,'0')}.BIN"
-        os.remove(log_file)
-        last_num = f"{int(num)-1}"
-        with open(log_index, 'w') as f:
-            f.write(last_num)
+        log_file = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/{num.rjust(8, '0')}.BIN"
+        # Remove file
+        if os.path.exists(log_file):
+            os.remove(log_file)
+            # Fix last index number
+            last_num = f"{int(num) - 1}"
+            with open(log_index, 'w') as f:
+                f.write(last_num)
 
     @staticmethod
     def load_param() -> json:
@@ -204,62 +240,50 @@ class FixMavlink(DroneMavlink):
     """
     Mainly responsible for initiating the communication link to interact with UAV
     """
+
     def __init__(self, port, recv_msg_queue, send_msg_queue):
         super(FixMavlink, self).__init__(port, recv_msg_queue, send_msg_queue)
 
     @staticmethod
-    def log_extract_apm(msg: dict):
+    def log_extract_apm(msg: DFMessage):
         """
         parse the msg of mavlink
         :param msg:
         :return:
         """
         out = None
-        if msg['mavpackettype'] == 'ATT':
+        if msg.get_type() == 'ATT':
             if len(toolConfig.LOG_MAP):
                 out = {
-                    'TimeS': msg['TimeUS'] / 1000000,
-                    'Roll': msg['Roll'],
-                    'Pitch': msg['Pitch'],
-                    'Yaw': (msg['Yaw'] + 180) % 360 - 180,
+                    'TimeS': msg.TimeUS / 1000000,
+                    'Roll': math.radians(msg.Roll),
+                    'Pitch': math.radians(msg.Pitch),
+                    'Yaw': math.radians(msg.Yaw) ,
                 }
-        elif msg['mavpackettype'] == 'RATE':
+        elif msg.get_type() == 'RATE':
             out = {
-                'TimeS': msg['TimeUS'] / 1000000,
-                'RateRoll': msg['R'],
-                'RatePitch': msg['P'],
-                'RateYaw': msg['Y'],
+                'TimeS': msg.TimeUS / 1000000,
+                # deg to rad
+                'RateRoll': math.radians(msg.R),
+                'RatePitch': math.radians(msg.P),
+                'RateYaw': math.radians(msg.Y),
             }
-        elif msg['mavpackettype'] == 'IMU':
+        elif msg.get_type() == 'IMU':
             out = {
-                'TimeS': msg['TimeUS'] / 1000000,
-                'AccX': msg['AccX'],
-                'AccY': msg['AccY'],
-                'AccZ': msg['AccZ'],
-                'GyrX': msg['GyrX'],
-                'GyrY': msg['GyrY'],
-                'GyrZ': msg['GyrZ'],
+                'TimeS': msg.TimeUS / 1000000,
+                'AccX': msg.AccX,
+                'AccY': msg.AccY,
+                'AccZ': msg.AccZ,
+                'GyrX': msg.GyrX,
+                'GyrY': msg.GyrY,
+                'GyrZ': msg.GyrZ,
             }
-        elif msg['mavpackettype'] == 'PARM':
+        elif msg.get_type() == 'PARM':
             out = {
-                'TimeS': msg['TimeUS'] / 1000000,
-                msg['Name']: msg['Value']
+                'TimeS': msg.TimeUS / 1000000,
+                msg.Name: msg.Value
             }
         return out
-
-    @staticmethod
-    def log_extract_px4(msg):
-        """
-        parse the on-board log message of px4
-        :param msg:
-        :return:
-        """
-        msg.drop(['label'], axis=1, inplace=True)
-        msg = msg.fillna(0)
-        msg = msg.sum()
-        msg[['roll', 'pitch', 'yaw']] = msg[['roll', 'pitch', 'yaw']] * 180
-        msg[['roll_body', 'pitch_body', 'yaw_body']] = msg[['roll_body', 'pitch_body', 'yaw_body']] * 180
-        return msg.to_dict()
 
     @staticmethod
     def extract_from_log_file(log_file):
@@ -271,70 +295,51 @@ class FixMavlink(DroneMavlink):
         accept_item = toolConfig.LOG_MAP
 
         logs = mavutil.mavlink_connection(log_file)
-        att = []
-        rate = []
-        imu = []
-        parm = []
+        # init
+        out_data = []
         accpet_param = FixMavlink.load_param().columns.to_list()
 
         while True:
             msg = logs.recv_match(type=accept_item)
             if msg is None:
                 break
-            msg = msg.to_dict()
+            if msg.get_type() == 'ATT':
+                out_data.append(FixMavlink.log_extract_apm(msg))
+            elif msg.get_type() == 'RATE':
+                out_data.append(FixMavlink.log_extract_apm(msg))
+            elif msg.get_type() == 'IMU':  # and msg['I'] == 0:
+                out_data.append(FixMavlink.log_extract_apm(msg))
+            elif msg.get_type() == 'PARM' and msg.Name in accpet_param:
+                out_data.append(FixMavlink.log_extract_apm(msg))
 
-            # 剔除IMU1的情况，只要IMU0
-            # if msg['mavpackettype'] == 'IMU' and msg['I'] == 0:
-            if msg['mavpackettype'] == 'ATT':
-                att.append(FixMavlink.log_extract_apm(msg))
-            elif msg['mavpackettype'] == 'RATE':
-                rate.append(FixMavlink.log_extract_apm(msg))
-            elif msg['mavpackettype'] == 'IMU': #and msg['I'] == 0:
-                imu.append(FixMavlink.log_extract_apm(msg))
-            elif msg['mavpackettype'] == 'PARM' and msg['Name'] in accpet_param:
-                parm.append(FixMavlink.log_extract_apm(msg))
+        pd_array = pd.DataFrame(out_data)
 
-        att = pd.DataFrame(att)
-        rate = pd.DataFrame(rate)
-        acc = pd.DataFrame(imu)
-        parm = pd.DataFrame(parm)
-        parm.fillna(method='ffill', inplace=True)
-        parm.dropna(inplace=True)
-        parm.drop_duplicates(FixMavlink.load_param().columns.to_list(), 'first', inplace=True)
-        parm = parm[['TimeS'] + toolConfig.PARAM]
+        # Remain timestamp .1 and drop duplicate
+        pd_array['TimeS'] = pd_array['TimeS'].round(1)
+        pd_array = pd_array.drop_duplicates(keep='first')
 
+        # merge data in same TimeS
+        df_array = pd.DataFrame(columns=pd_array.columns)
+        for group, group_item in pd_array.groupby('TimeS'):
+            # fillna
+            group_item = group_item.fillna(method='ffill')
+            group_item = group_item.fillna(method='bfill')
+            df_array = df_array.append(group_item.mean(), ignore_index=True)
+        # Drop nan
+        df_array = df_array.fillna(method='ffill')
+        df_array = df_array.dropna()
 
-        # 进行采样，统一刷新率
-        att['TimeS'] = att['TimeS'].round(1)
-        att.drop_duplicates('TimeS', keep='first', inplace=True)
-
-        rate['TimeS'] = rate['TimeS'].round(1)
-        rate.drop_duplicates('TimeS', keep='first', inplace=True)
-
-        acc['TimeS'] = acc['TimeS'].round(1)
-        acc.drop_duplicates('TimeS', keep='first', inplace=True)
-
-        parm['TimeS'] = parm['TimeS'].round(1)
-        parm.drop_duplicates('TimeS', keep='last', inplace=True)
-
-        # 合数据
-        out = pd.merge(att, acc, on='TimeS')
-        out = pd.merge(out, rate, on='TimeS')
-
-        out.dropna(inplace=True)
-
-        # 加入configuration
-        out = pd.merge(out, parm, on='TimeS', how='outer')
-        out.fillna(method='ffill', inplace=True)
-
+        # Sort name
         attitude_name = ['TimeS', 'Roll', 'Pitch', 'Yaw', 'RateRoll', 'RatePitch', 'RateYaw',
-                         'AccX',    'AccY'    ,'AccZ'    ,'GyrX'  ,  'GyrY'  ,  'GyrZ'
+                         'AccX', 'AccY', 'AccZ', 'GyrX', 'GyrY', 'GyrZ'
                          ]
-        other_name = out.keys().difference(attitude_name)
-        attitude_name.extend(other_name.tolist())
-
-        out = out[attitude_name]
-        return out
+        param_seq = FixMavlink.load_param().columns.to_list()
+        param_name = df_array.keys().difference(attitude_name).to_list()
+        param_name.sort(key=lambda item: param_seq.index(item))
+        # Status value + Parameter name
+        attitude_name.extend(param_name)
+        # Switch sequence and return
+        return df_array[attitude_name]
 
     @staticmethod
     def read_path_specified_file(log_path, exe):
@@ -364,10 +369,17 @@ class FixMavlink(DroneMavlink):
             os.makedirs(f"{log_path}/csv")
 
         # 列出文件夹内所有.BIN结尾的文件并排序
-        for file in file_list:
+        for file in tqdm(file_list):
             name, _ = file.split('.')
-            csv_data = FixMavlink.extract_from_log_file(log_path + f'/{file}')
-            csv_data.to_csv(f'{log_path}/csv/{name}.csv', index=False)
+            if os.path.exists(f'{log_path}/csv/{name}.csv'):
+                continue
+            # extract
+            try:
+                csv_data = FixMavlink.extract_from_log_file(log_path + f'/{file}')
+                csv_data.to_csv(f'{log_path}/csv/{name}.csv', index=False)
+            except Exception as e:
+                logging.warning(f"Error processing {file} : {e}")
+                continue
 
     @staticmethod
     @ray.remote
@@ -491,19 +503,194 @@ class FixMavlink(DroneMavlink):
                     elif message["severity"] == 2 or message["severity"] == 0:
                         # Appear error, break loop and return false
                         if "SIM Hit ground at" in line:
-                            out_msg = "hit ground"
+                            pass
                         elif "Potential Thrust Loss" in line:
-                            out_msg = "thrust loss"
-                        elif "Prearm" in line:
-                            out_msg = "prearm fail"
+                            pass
+                        elif "PreArm" in line:
+                            pass
+                            # will not generate log file
+                            logging.info(f"Get error with {message['text']}")
+                            return True
                         logging.info(f"Get error with {message['text']}")
                         return False
             except TimeoutError:
                 # Mission point time out, change other params
-                logging.debug('wp timeout! change param')
+                logging.warning('wp timeout!')
                 return False
             except KeyboardInterrupt:
                 logging.info('Key bordInterrupt! exit')
-                break
+                return False
         return True
 
+
+class FlyFixMavlink(DroneMavlink):
+    def __init__(self, port, recv_msg_queue, send_msg_queue):
+        super(FlyFixMavlink, self).__init__(port, recv_msg_queue, send_msg_queue)
+        self.predictor: CyLSTM = None
+
+    def init_predictor(self, epochs, batch_size):
+        self.predictor = CyLSTM(epochs, batch_size, toolConfig.DEBUG)
+        self.predictor.read_model()
+
+    def read_status_patch(self, time_unit, status):
+        out_data = []
+        first_msg = self._master.recv_match(type=status, blocking=True)
+        out_data.append(FlyFixMavlink.runtime_extract_apm(first_msg))
+        first_time = FlyFixMavlink.get_time_index(first_msg)
+        new_time = first_time
+
+        # Collect data in one time_unit
+        while new_time <= first_time + time_unit:
+            new_msg = self._master.recv_match(type=status, blocking=True)
+            # Add and process
+            new_time = FlyFixMavlink.get_time_index(new_msg)
+            out_data.append(FlyFixMavlink.runtime_extract_apm(new_msg))
+
+        # Read current configuration
+        params = self.get_params(toolConfig.PARAM)
+        out_data.append(params)
+        pd_array = pd.DataFrame(out_data)
+
+        # Remain timestamp .1 and drop duplicate
+        pd_array['TimeS'] = pd_array['TimeS'].round(1)
+        pd_array = pd_array.drop_duplicates(keep='first')
+        pd_array[toolConfig.PARAM] = pd_array[toolConfig.PARAM].fillna(method="bfill")
+
+        # merge data in same TimeS
+        df_array = pd.DataFrame(columns=pd_array.columns)
+        for group, group_item in pd_array.groupby('TimeS'):
+            # fillna
+            group_item = group_item.fillna(method='ffill')
+            group_item = group_item.fillna(method='bfill')
+            df_array = df_array.append(group_item.mean(), ignore_index=True)
+        # Drop nan
+        df_array = df_array.fillna(method='ffill')
+        df_array = df_array.dropna()
+
+        return df_array
+
+    def cal_patch_loss(self, status_data, predicted_data) -> float:
+        # TODO
+        return 0
+
+    @staticmethod
+    def runtime_extract_apm(msg):
+        """
+        parse the msg of mavlink
+        :param msg:
+        :return:
+        """
+        out = None
+        if msg.name == 'ATTITUDE':
+            if len(toolConfig.LOG_MAP):
+                out = {
+                    'TimeS': msg.time_boot_ms / 1000,
+                    # Rad
+                    'Roll': msg.roll,
+                    'Pitch': msg.pitch,
+                    'Yaw': msg.pitch,
+                    'RateRoll': msg.rollspeed,
+                    'RatePitch': msg.pitchspeed,
+                    'RateYaw': msg.yawspeed,
+                }
+        elif msg.name == 'RAW_IMU':
+            out = {
+                'TimeS': msg.time_usec / 1000000,
+                # raw
+                'AccX': msg.xacc,
+                'AccY': msg.yacc,
+                'AccZ': msg.zacc,
+                'GyrX': msg.xgyro,
+                'GyrY': msg.ygyro,
+                'GyrZ': msg.zgyro,
+            }
+        return out
+
+    def predict_status(self, status_data):
+        if self.predictor is None:
+            logging.warning('Predictor is not set!')
+            raise ValueError('Train or load model at first')
+
+        status_numpy = status_data.to_numpy()
+        predict_X = self.predictor.predict(status_numpy)
+
+        # data retrans
+        if modelConfig.RETRANS:
+            trans = self.predictor.load_trans()
+            predict_X = trans.inverse_transform(predict_X)
+        return predict_X
+
+    def sample_state(self):
+        self.read_status(["ATTITUDE", "NAV_CONTROLLER_OUTPUT", "VFR_HUD"])
+
+    def detect_instability(self, status_data):
+        predicted_data = self.predict_status(status_data)
+        # 计算偏差
+        patch_loss = self.cal_patch_loss(status_data, predicted_data)
+        # If over the threshold
+        pass
+
+
+    def repair_configuration(self):
+        # TODO
+        pass
+
+    @staticmethod
+    def get_time_index(msg):
+        """
+        As different message have different time unit. It needs to convert to same second unit.
+        :return:
+        """
+        if msg.name == "ATTITUDE":
+            return msg.time_boot_ms / 1000
+        if msg.name == "RAW_IMU":
+            return msg.time_usec / 1000000
+
+    def wait_complete(self):
+        if not self._master:
+            raise ValueError('Connect at first!')
+        while True:
+            try:
+                message = self._master.recv_match(type=['STATUSTEXT'],
+                                                  blocking=True, timeout=30)
+                if message is not None:
+                    message = message.to_dict()
+                    out_msg = "None"
+                    line = message['text']
+                    if message["severity"] == 6:
+                        if "Land" in line:
+                            # if successful landed, break the loop and return true
+                            logging.info(f"Successful.")
+                            return True
+                    # elif message["severity"] == 2 or message["severity"] == 0:
+                    #     # Appear error, break loop and return false
+                    #     if "SIM Hit ground at" in line:
+                    #         pass
+                    #     elif "Potential Thrust Loss" in line:
+                    #         pass
+                    #     elif "PreArm" in line:
+                    #         pass
+                    #         # will not generate log file
+                    #         logging.info(f"Get error with {message['text']}")
+                    #         return True
+                    #     logging.info(f"Get error with {message['text']}")
+                    #     return False
+            except TimeoutError:
+                # Mission point time out, change other params
+                logging.warning('wp timeout!')
+                return False
+            except KeyboardInterrupt:
+                logging.info('Key bordInterrupt! exit')
+                return False
+        return True
+
+    def run(self) -> None:
+        # loop to change configuration
+
+        # Sample a patch
+        status_data = self.read_status_patch(2, ["ATTITUDE", "RAW_IMU"])
+        # Detect
+        result = self.detect_instability(status_data)
+        # # GA Repair
+        # if result is True:
+        #     self.repair_configuration()

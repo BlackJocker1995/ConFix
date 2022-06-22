@@ -5,7 +5,7 @@ import multiprocessing
 import os
 import random
 import shutil
-import time
+import eventlet
 
 import numpy as np
 import pandas as pd
@@ -47,7 +47,7 @@ class DroneMavlink(multiprocessing.Process):
     def ready2fly(self) -> bool:
         while True:
             message = self._master.recv_match(type=['STATUSTEXT'],
-                                                          blocking=True, timeout=30)
+                                              blocking=True, timeout=30)
             message = message.to_dict()["text"]
             # print(message)
             if "IMU0 is using GPS" in message:
@@ -268,7 +268,7 @@ class FixMavlink(DroneMavlink):
                     'TimeS': msg.TimeUS / 1000000,
                     'Roll': math.radians(msg.Roll),
                     'Pitch': math.radians(msg.Pitch),
-                    'Yaw': math.radians(msg.Yaw) ,
+                    'Yaw': math.radians(msg.Yaw),
                 }
         elif msg.get_type() == 'RATE':
             out = {
@@ -494,21 +494,22 @@ class FixMavlink(DroneMavlink):
     def read_unit_from_dict(para_dict):
         return para_dict.loc['step'].to_numpy()
 
-    def wait_complete(self):
+    def wait_complete(self, timeout=60 * 5):
         if not self._master:
             raise ValueError('Connect at first!')
-        while True:
-            try:
-                message = self._master.recv_match(type=['STATUSTEXT'],
-                                                  blocking=True, timeout=30)
-                if message is not None:
+        try:
+            with eventlet.Timeout(timeout, exception=RuntimeError):
+                while True:
+                    message = self._master.recv_match(type=['STATUSTEXT'], blocking=True, timeout=30)
+                    if message is None:
+                        continue
                     message = message.to_dict()
                     out_msg = "None"
                     line = message['text']
                     if message["severity"] == 6:
                         if "Land" in line:
                             # if successful landed, break the loop and return true
-                            logging.info(f"Successful.")
+                            logging.info(f"Successful break the loop.")
                             return True
                     elif message["severity"] == 2 or message["severity"] == 0:
                         # Appear error, break loop and return false
@@ -523,13 +524,13 @@ class FixMavlink(DroneMavlink):
                             return True
                         logging.info(f"Get error with {message['text']}")
                         return False
-            except TimeoutError:
-                # Mission point time out, change other params
-                logging.warning('wp timeout!')
-                return False
-            except KeyboardInterrupt:
-                logging.info('Key bordInterrupt! exit')
-                return False
+        except TimeoutError:
+            # Mission point time out, change other params
+            logging.warning('wp timeout!')
+            return False
+        except KeyboardInterrupt:
+            logging.info('Key bordInterrupt! exit')
+            return False
         return True
 
 
@@ -639,7 +640,6 @@ class FlyFixMavlink(DroneMavlink):
         patch_loss = self.cal_patch_loss(status_data, predicted_data)
         # If over the threshold
         pass
-
 
     def repair_configuration(self):
         # TODO

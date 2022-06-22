@@ -3,6 +3,8 @@ import os
 import time
 from datetime import datetime
 
+import ray
+
 from Cptool.config import toolConfig
 from Cptool.mavlink import FixMavlink, DroneMavlink, FlyFixMavlink
 from Cptool.simManager import FixSimManager
@@ -21,8 +23,4 @@ if __name__ == '__main__':
 
     manager.start_mav_monitor()
 
-    manager.mav_monitor.start_mission()
-
-    while True:
-        time.sleep(0.1)
-    manager.stop_sitl()
+    manager.mav_monitor.online_monitor()

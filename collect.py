@@ -41,7 +41,7 @@ if __name__ == '__main__':
 
         manager.mav_monitor.set_mission('Cptool/fitCollection.txt', False)
 
-        manager.mav_monitor.random_param_and_set()
+        manager.mav_monitor.set_random_param_and_start()
 
         manager.start_mav_monitor()
 

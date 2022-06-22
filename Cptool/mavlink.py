@@ -45,19 +45,22 @@ class DroneMavlink(multiprocessing.Process):
         return True
 
     def ready2fly(self) -> bool:
+        """
+        wait for IMU can work
+        :return:
+        """
         while True:
-            message = self._master.recv_match(type=['STATUSTEXT'],
-                                              blocking=True, timeout=30)
+            message = self._master.recv_match(type=['STATUSTEXT'], blocking=True, timeout=30)
             message = message.to_dict()["text"]
             # print(message)
             if "IMU0 is using GPS" in message:
                 logging.debug("Ready to fly.")
                 return True
 
-    def set_mission(self, mission_file, random: bool, timeout=30) -> bool:
+    def set_mission(self, mission_file, israndom: bool = False, timeout=30) -> bool:
         """
         Set mission
-        :param random: Out of order
+        :param israndom: random mission order
         :param mission_file: mission file
         :param timeout:
         :return: success
@@ -70,11 +73,10 @@ class DroneMavlink(multiprocessing.Process):
         loader.load(mission_file)
         logging.debug(f"Load mission file {mission_file}")
 
+        if israndom:
+            loader = self.random_mission(loader)
         # clear the waypoint
         self._master.waypoint_clear_all_send()
-        # Pop home wp if mode is PX4
-        if toolConfig.MODE == 'PX4':
-            loader = self.trans_wp2px4(loader)
         # send the waypoint count
         self._master.waypoint_count_send(loader.count())
         seq_list = [True] * loader.count()
@@ -152,14 +154,14 @@ class DroneMavlink(multiprocessing.Process):
             out_dict[param] = self.get_param(param)
         return out_dict
 
-    def get_msg(self, type, block=False):
+    def get_msg(self, msg_type, block=False):
         """
         receive the mavlink message
-        :param type:
+        :param msg_type:
         :param block:
         :return:
         """
-        msg = self._master.recv_match(type=type, blocking=block)
+        msg = self._master.recv_match(type=msg_type, blocking=block)
         return msg
 
     def set_mode(self, mode: str):
@@ -182,21 +184,11 @@ class DroneMavlink(multiprocessing.Process):
                 logging.debug(f'Mode: {mode} Set successful')
                 break
 
-    def random_param_and_set(self):
+    def set_random_param_and_start(self):
         param_configuration = self.create_random_params(toolConfig.PARAM)
         self.set_params(param_configuration)
         # Unlock the uav
         self.start_mission()
-
-    def read_status(self, status):
-        out_status = dict()
-        local_status = status
-        while len(local_status) != 0:
-            msg = self._master.recv_match(type=status, blocking=True)
-            msg = msg.to_dict()
-            local_status.remove(msg["mavpackettype"])
-            out_status[msg["mavpackettype"]] = msg
-        return out_status
 
     def wait_complete(self):
         pass
@@ -244,6 +236,21 @@ class DroneMavlink(multiprocessing.Process):
             path = 'Cptool/param_px4.json'
         with open(path, 'r') as f:
             return pd.DataFrame(json.loads(f.read()))
+
+    @staticmethod
+    def random_mission(loader):
+        """
+        create random order of a mission
+        :param loader: waypoint loader
+        :return:
+        """
+        index = random.sample(loader.wpoints[2:loader.count() - 1], loader.count() - 3)
+        index = loader.wpoints[0:2] + index
+        index.append(loader.wpoints[-1])
+        for i, points in enumerate(index):
+            points.seq = i
+        loader.wpoints = index
+        return loader
 
 
 class FixMavlink(DroneMavlink):
@@ -526,7 +533,7 @@ class FixMavlink(DroneMavlink):
                         return False
         except TimeoutError:
             # Mission point time out, change other params
-            logging.warning('wp timeout!')
+            logging.warning('Wp timeout!')
             return False
         except KeyboardInterrupt:
             logging.info('Key bordInterrupt! exit')
@@ -580,9 +587,37 @@ class FlyFixMavlink(DroneMavlink):
 
         return df_array
 
+    def predict_status(self, status_data):
+        if self.predictor is None:
+            logging.warning('Predictor is not set!')
+            raise ValueError('Train or load model at first')
+        # Convert
+        status_numpy = status_data.to_numpy()[:, 1:]
+        if modelConfig.RETRANS:
+            trans = self.predictor.load_trans()
+            status_numpy = trans.transform(status_numpy)
+        # split
+        status_numpy = self.predictor.series2segment_predict(status_numpy)
+        # predict each status
+        predict_status = self.predictor.predict(status_numpy)
+
+        return predict_status
+
     def cal_patch_loss(self, status_data, predicted_data) -> float:
         # TODO
         return 0
+
+    def detect_instability(self, status_data) -> bool:
+        predicted_data = self.predict_status(status_data)
+        # 计算偏差
+        patch_loss = self.cal_patch_loss(status_data, predicted_data)
+        # If over the threshold
+        pass
+        return False
+
+    def repair_configuration(self):
+        # TODO
+        pass
 
     @staticmethod
     def runtime_extract_apm(msg):
@@ -617,34 +652,6 @@ class FlyFixMavlink(DroneMavlink):
             }
         return out
 
-    def predict_status(self, status_data):
-        if self.predictor is None:
-            logging.warning('Predictor is not set!')
-            raise ValueError('Train or load model at first')
-
-        status_numpy = status_data.to_numpy()
-        predict_X = self.predictor.predict(status_numpy)
-
-        # data retrans
-        if modelConfig.RETRANS:
-            trans = self.predictor.load_trans()
-            predict_X = trans.inverse_transform(predict_X)
-        return predict_X
-
-    def sample_state(self):
-        self.read_status(["ATTITUDE", "NAV_CONTROLLER_OUTPUT", "VFR_HUD"])
-
-    def detect_instability(self, status_data):
-        predicted_data = self.predict_status(status_data)
-        # 计算偏差
-        patch_loss = self.cal_patch_loss(status_data, predicted_data)
-        # If over the threshold
-        pass
-
-    def repair_configuration(self):
-        # TODO
-        pass
-
     @staticmethod
     def get_time_index(msg):
         """
@@ -655,6 +662,12 @@ class FlyFixMavlink(DroneMavlink):
             return msg.time_boot_ms / 1000
         if msg.name == "RAW_IMU":
             return msg.time_usec / 1000000
+
+    def online_monitor(self):
+        # Sample a patch
+        status_data = self.read_status_patch(2, ["ATTITUDE", "RAW_IMU"])
+        # Detect
+        result = self.detect_instability(status_data)
 
     def wait_complete(self):
         if not self._master:
@@ -693,14 +706,3 @@ class FlyFixMavlink(DroneMavlink):
                 logging.info('Key bordInterrupt! exit')
                 return False
         return True
-
-    def run(self) -> None:
-        # loop to change configuration
-
-        # Sample a patch
-        status_data = self.read_status_patch(2, ["ATTITUDE", "RAW_IMU"])
-        # Detect
-        result = self.detect_instability(status_data)
-        # # GA Repair
-        # if result is True:
-        #     self.repair_configuration()

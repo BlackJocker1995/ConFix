@@ -142,7 +142,14 @@ class Modeling(object):
         # data retrans
         if modelConfig.RETRANS:
             trans = self.load_trans()
+            # tmp param values
+            tmp_param = values[0, 0][-modelConfig.PARAM_LEN:]
+            # merge
+            predict_X = np.c_[predict_X, np.tile(tmp_param, (predict_X.shape[0], 1))]
+            # trans
             predict_X = trans.inverse_transform(predict_X)
+            # drop param value
+            predict_X = predict_X[:, :-modelConfig.PARAM_LEN]
 
         return predict_X
 
@@ -246,7 +253,7 @@ class Modeling(object):
 
             plt.margins(0, 0)
             plt.gcf().subplots_adjust(bottom=0.12)
-            plt.savefig(f'{os.getcwd()}/fig/{Cptool.config.MODE}/{ModelFit.config.INPUT_LEN}/{cmp_name}/{name.lower()}.{exec}', dpi=300)
+            plt.savefig(f'{os.getcwd()}/fig/{modelConfig.MODE}/{modelConfig.INPUT_LEN}/{cmp_name}/{name.lower()}.{exec}', dpi=300)
             # plt.show()
             plt.clf()
 
@@ -332,6 +339,28 @@ class Modeling(object):
             trans = pickle.load(f)
         return trans
 
+    @staticmethod
+    def series2segment_predict(data, dropnan=True):
+        """
+        trans a numpy array data to segments. like (6, 32) to 3 (4,32) e.g., (3, 4, 32)
+        :param data:
+        :param dropnan:
+        :return:
+        """
+
+        # convert series to supervised learning
+        df = pd.DataFrame(data)
+        cols, names = list(), list()
+        # input sequence (t-n, ... t-1)
+        for i in range(modelConfig.INPUT_LEN - 1, -1, -1):
+            cols.append(df.shift(i))
+
+        # put it all together
+        agg = pd.concat(cols, axis=1)
+        # drop rows with NaN values
+        if dropnan:
+            agg.dropna(inplace=True)
+        return agg.to_numpy().reshape((-1, modelConfig.INPUT_LEN, modelConfig.DATA_LEN))
 
 class CyLSTM(Modeling):
     def __init__(self, epochs: int, batch_size: int, debug: bool = False):

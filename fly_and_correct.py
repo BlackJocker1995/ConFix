@@ -17,9 +17,6 @@ if __name__ == '__main__':
 
     manager.mav_monitor.init_predictor(100, 128)
 
-    if not manager.mav_monitor_connect():
-        manager.stop_sitl()
-
     manager.mav_monitor.set_mission('Cptool/fitCollection.txt', False)
 
     manager.start_mav_monitor()

@@ -39,9 +39,6 @@ if __name__ == '__main__':
 
         manager.mav_monitor_init(FixMavlink)
 
-        if not manager.mav_monitor_connect():
-            manager.stop_sitl()
-
         manager.mav_monitor.set_mission('Cptool/fitCollection.txt', False)
 
         manager.mav_monitor.random_param_and_set()

@@ -44,6 +44,16 @@ class DroneMavlink(multiprocessing.Process):
             self._master.target_system, self._master.target_system))
         return True
 
+    def ready2fly(self) -> bool:
+        while True:
+            message = self._master.recv_match(type=['STATUSTEXT'],
+                                                          blocking=True, timeout=30)
+            message = message.to_dict()["text"]
+            # print(message)
+            if "IMU0 is using GPS" in message:
+                logging.debug("Ready to fly.")
+                return True
+
     def set_mission(self, mission_file, random: bool, timeout=30) -> bool:
         """
         Set mission

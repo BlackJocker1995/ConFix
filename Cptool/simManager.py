@@ -31,7 +31,7 @@ class SimManager(object):
                                 level=logging.DEBUG)
         else:
             logging.basicConfig(format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s',
-                        level=logging.INFO)
+                                level=logging.INFO)
 
     def start_sim(self):
         """
@@ -105,19 +105,17 @@ class SimManager(object):
         初始化SITL在环
         :return:
         """
-        # if toolConfig.MODE == 'Ardupilot':
-        #     while True:
-        #         line = self._sitl_task.readline()
-        #         if "IMU0 is using GPS" in line:
-        #             break
-        #         # if line.startswith('APM: GPS 1: detected as'):
-        #         #     break
-        # elif toolConfig.MODE == 'PX4':
-        #     while True:
-        #         line = self._sitl_task.readline()
-        #         if 'notify negative' in line:
-        #             break
         self.mav_monitor = mavlink_class(14540, recv_msg_queue=self.sim_msg_queue, send_msg_queue=self.mav_msg_queue)
+        self.mav_monitor.connect()
+        if toolConfig.MODE == 'Ardupilot':
+            if self.mav_monitor.ready2fly():
+                return True
+        elif toolConfig.MODE == 'PX4':
+            while True:
+                line = self._sitl_task.readline()
+                if 'notify negative' in line:
+                    break
+        # self.mav_monitor = mavlink_class(14540, recv_msg_queue=self.sim_msg_queue, send_msg_queue=self.mav_msg_queue)
 
     def mav_monitor_connect(self):
         """
@@ -245,7 +243,7 @@ class FixSimManager(SimManager):
                     print('message is None')
                     message = {'seq': 7}
                     continue
-                #print(message)
+                # print(message)
             except TimeoutError:
                 # Mission point time out, change other params
                 print('wp timeout! change param')
@@ -255,6 +253,7 @@ class FixSimManager(SimManager):
                 print('Key bordInterrupt! exit')
                 self.master.set_mode_rtl()
                 break
+
 
 def threading_send(task):
     t = threading.currentThread()

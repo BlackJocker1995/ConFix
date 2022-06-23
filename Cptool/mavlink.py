@@ -129,6 +129,9 @@ class DroneMavlink(multiprocessing.Process):
         for param, value in params_dict.items():
             self.set_param(param, value)
 
+    def reset_params(self):
+        self.set_param("FORMAT_VERSION", 0)
+
     def get_param(self, param: str) -> float:
         """
         get current value of a parameter.
@@ -603,17 +606,46 @@ class FlyFixMavlink(DroneMavlink):
 
         return predict_status
 
-    def cal_patch_loss(self, status_data, predicted_data) -> float:
-        # TODO
-        return 0
+    def cal_patch_deviation(self, status_data, predicted_data):
+        """
+        calculate matrix deviation between status_data and predicted data
+        :param status_data: real flight status data
+        :param predicted_data: predicted data
+        :return: status_deviation result which has been normalized
+        """
+        ground_true_data = status_data[:-predicted_data.shape[0], :-toolConfig.PARAM_LEN]
+        status_deviation = np.abs(ground_true_data - predicted_data)
+
+        # normalization
+        trans = self.predictor.load_trans()
+        # tmp param values
+        tmp_param = status_data[0, 0][-modelConfig.PARAM_LEN:]
+        # merge
+        status_deviation = np.c_[status_deviation, np.tile(tmp_param, (status_deviation.shape[0], 1))]
+        # trans
+        status_deviation = trans.transform(status_deviation)
+        # drop param value
+        status_deviation = status_deviation[:, :-modelConfig.PARAM_LEN]
+
+        return status_deviation
+
+    def loss_discriminate(self, patch_deviation):
+        pass
 
     def detect_instability(self, status_data) -> bool:
+        """
+        detect whether this status becomes instability
+        :param status_data: status patch containing parameters
+        :return: True : stability False: instability
+        """
+        # create predicted status of this status patch
         predicted_data = self.predict_status(status_data)
-        # 计算偏差
-        patch_loss = self.cal_patch_loss(status_data, predicted_data)
-        # If over the threshold
-        pass
-        return False
+        # calculate deviation between real and predicted
+        patch_deviation = self.cal_patch_deviation(status_data, predicted_data)
+        # discriminated if pass
+        if not self.loss_discriminate(patch_deviation):
+            return False
+        return True
 
     def repair_configuration(self):
         # TODO
@@ -668,6 +700,9 @@ class FlyFixMavlink(DroneMavlink):
         status_data = self.read_status_patch(2, ["ATTITUDE", "RAW_IMU"])
         # Detect
         result = self.detect_instability(status_data)
+
+        if result is False:
+            self.repair_configuration()
 
     def wait_complete(self):
         if not self._master:

@@ -13,7 +13,6 @@ from keras.layers import LSTM
 from keras.models import Sequential
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
-from tcn import TCN
 from tensorflow.python.keras.models import load_model
 
 from Cptool.config import toolConfig

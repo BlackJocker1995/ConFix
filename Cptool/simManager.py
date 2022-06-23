@@ -107,14 +107,14 @@ class SimManager(object):
         """
         self.mav_monitor = mavlink_class(14540, recv_msg_queue=self.sim_msg_queue, send_msg_queue=self.mav_msg_queue)
         self.mav_monitor.connect()
-        # if toolConfig.MODE == 'Ardupilot':
-        #     if self.mav_monitor.ready2fly():
-        #         return True
-        # elif toolConfig.MODE == 'PX4':
-        #     while True:
-        #         line = self._sitl_task.readline()
-        #         if 'notify negative' in line:
-        #             break
+        if toolConfig.MODE == 'Ardupilot':
+            if self.mav_monitor.ready2fly():
+                return True
+        elif toolConfig.MODE == 'PX4':
+            while True:
+                line = self._sitl_task.readline()
+                if 'notify negative' in line:
+                    break
         # self.mav_monitor = mavlink_class(14540, recv_msg_queue=self.sim_msg_queue, send_msg_queue=self.mav_msg_queue)
 
     def mav_monitor_connect(self):

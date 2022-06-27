@@ -19,15 +19,15 @@ class ToolConfig:
 toolConfig = ToolConfig()
 # SITL Type PX4 and Ardupilot
 # {'PX4','Ardupilot'}
-toolConfig.MODE = 'Ardupilot'
+toolConfig.MODE = 'Ardupilot' #"PX4" #
 # Simulation Type
 # Ardupilot : ['Airsim', 'Morse', 'Gazebo', 'SITL']
 # PX4 : ['Jmavsim']
-toolConfig.SIM = 'SITL'
+toolConfig.SIM = "SITL" # "Jmavsim"
 # Simulation Speed
 toolConfig.SPEED = 3
 # Output Debug Message
-toolConfig.DEBUG = False
+toolConfig.DEBUG = True
 # Wind Speed range
 toolConfig.WIND_RANGE = [8, 10.7]
 # GUI Windows size
@@ -40,8 +40,27 @@ toolConfig.LIMIT_L = 40
 toolConfig.ARDUPILOT_LOG_PATH = '/media/rain/data'
 # PX4 LOG Path
 toolConfig.PX4_LOG_PATH = '/home/rain/PX4-Autopilot'
-# Mavlink Part
-toolConfig.LOG_MAP = ['IMU', 'ATT', 'RATE', 'PARM']
+if toolConfig.MODE == "Ardupilot":
+    # Mavlink Part
+    toolConfig.LOG_MAP = ['IMU', 'ATT', 'RATE', 'PARM', 'VIBE', 'POS', "MAG"]
+    # Online Mavlink Part
+    toolConfig.OL_LOG_MAP = ['ATTITUDE', 'RAW_IMU', 'GLOBAL_POSITION_INT', 'VIBRATION']
+    # Status Order
+    toolConfig.STATUS_ORDER = ['TimeS', 'Roll', 'Pitch', 'Yaw', 'RateRoll', 'RatePitch', 'RateYaw',
+                           'Lat', 'Lng', 'Alt',
+                           'AccX', 'AccY', 'AccZ', 'GyrX', 'GyrY', 'GyrZ',
+                           'MagX', 'MagY', 'MagZ', 'VibeX', 'VibeY', 'VibeZ']
+elif toolConfig.MODE == "PX4":
+    # TODO: px4 data
+    # Mavlink Part
+    toolConfig.LOG_MAP = ['IMU', 'ATT', 'RATE', 'PARM', 'VIBE', 'POS', "MAG"]
+    # Online Mavlink Part
+    toolConfig.OL_LOG_MAP = ['ATTITUDE', 'RAW_IMU', 'GLOBAL_POSITION_INT', 'VIBRATION']
+    # Status Order
+    toolConfig.STATUS_ORDER = ['TimeS', 'Roll', 'Pitch', 'Yaw', 'RateRoll', 'RatePitch', 'RateYaw',
+                               'Lat', 'Lng', 'Alt',
+                               'AccX', 'AccY', 'AccZ', 'GyrX', 'GyrY', 'GyrZ',
+                               'MagX', 'MagY', 'MagZ', 'VibeX', 'VibeY', 'VibeZ']
 # LOG_MAP = ['ATT', 'RATE']
 toolConfig.PARAM = [
     "PSC_POSXY_P",

@@ -11,6 +11,9 @@ modelConfig.MODE = 'Ardupilot'
 # 是否输出Debug信息
 modelConfig.DEBUG = False
 
+# Status 长度
+modelConfig.STATUS_LEN = len(toolConfig.STATUS_ORDER)
+
 # Parameter的长度
 modelConfig.PARAM_LEN = len(toolConfig.PARAM)
 
@@ -21,13 +24,13 @@ modelConfig.INPUT_LEN = 4
 modelConfig.OUTPUT_LEN = 1
 
 # 每一个input数据的长度
-modelConfig.DATA_LEN = 12 + len(toolConfig.PARAM)
+modelConfig.DATA_LEN = modelConfig.STATUS_LEN + len(toolConfig.PARAM)
 
 # 输入的数据长度
 modelConfig.INPUT_DATA_LEN = modelConfig.DATA_LEN * modelConfig.INPUT_LEN
 
 # 输出的数据长度
-modelConfig.OUTPUT_DATA_LEN = 12 * modelConfig.OUTPUT_LEN
+modelConfig.OUTPUT_DATA_LEN = modelConfig.STATUS_LEN * modelConfig.OUTPUT_LEN
 
 # 每一个片段的大小
 modelConfig.SEGMENT_LEN = 6

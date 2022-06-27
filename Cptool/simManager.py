@@ -82,10 +82,14 @@ class SimManager(object):
             self._sitl_task = pexpect.spawn(cmd, cwd=toolConfig.ARDUPILOT_LOG_PATH, timeout=30, encoding='utf-8')
 
         if toolConfig.MODE == 'PX4':
+            pre_argv = f"PX4_HOME_LAT=40.072842 " \
+                  f"PX4_HOME_LON=-105.230575 " \
+                  f"PX4_HOME_ALT=0 " \
+                  f"PX4_SIM_SPEED_FACTOR={toolConfig.SPEED} "
             if toolConfig.SIM == 'Airsim':
-                cmd = f'make PX4_SIM_SPEED_FACTOR={toolConfig.SPEED} px4_sitl_default none_iris'
+                cmd = f'make {pre_argv} px4_sitl_default none_iris'
             if toolConfig.SIM == 'Jmavsim':
-                cmd = f'make PX4_SIM_SPEED_FACTOR={toolConfig.SPEED} px4_sitl_default jmavsim'
+                cmd = f'HEADLESS=1 make {pre_argv} px4_sitl_default jmavsim'
 
             self._sitl_task = pexpect.spawn(cmd, cwd=toolConfig.PX4_LOG_PATH, timeout=30, encoding='utf-8')
         logging.info(f"Start {toolConfig.MODE} --> [{toolConfig.SIM}]")
@@ -114,8 +118,8 @@ class SimManager(object):
             while True:
                 line = self._sitl_task.readline()
                 if 'notify negative' in line:
+                    logging.debug("Ready to fly.")
                     break
-        # self.mav_monitor = mavlink_class(14540, recv_msg_queue=self.sim_msg_queue, send_msg_queue=self.mav_msg_queue)
 
     def mav_monitor_connect(self):
         """

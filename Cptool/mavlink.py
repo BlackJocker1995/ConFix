@@ -40,8 +40,8 @@ class DroneMavlink(multiprocessing.Process):
             self._master.wait_heartbeat(timeout=30)
         except TimeoutError:
             return False
-        logging.info("Heartbeat from system (system %u component %u)" % (
-            self._master.target_system, self._master.target_system))
+        logging.info("Heartbeat from system (system %u component %u) from %u" % (
+            self._master.target_system, self._master.target_system, self._port))
         return True
 
     def ready2fly(self) -> bool:
@@ -51,11 +51,27 @@ class DroneMavlink(multiprocessing.Process):
         """
         while True:
             message = self._master.recv_match(type=['STATUSTEXT'], blocking=True, timeout=30)
+            # message = self._master.recv_match(blocking=True, timeout=30)
             message = message.to_dict()["text"]
             # print(message)
-            if "IMU0 is using GPS" in message:
+            if toolConfig.MODE == "Ardupilot" and "IMU0 is using GPS" in message:
                 logging.debug("Ready to fly.")
                 return True
+            # if toolConfig.MODE == "PX4":
+            #     logging.debug("Ready to fly.")
+            #     return True
+
+    def px4_set_home(self):
+        self._master.mav.command_long_send(self._master.mav.target_system, self._master.mav.target_componet,
+                                           mavutil.mavlink.MAV_CMD_DO_SET_HOME,
+                                           1,
+                                           0,
+                                           0,
+                                           0,
+                                           0,
+                                           40.072842,
+                                           -105.230575,
+                                           0)
 
     def set_mission(self, mission_file, israndom: bool = False, timeout=30) -> bool:
         """
@@ -72,6 +88,10 @@ class DroneMavlink(multiprocessing.Process):
         loader = mavwp.MAVWPLoader()
         loader.load(mission_file)
         logging.debug(f"Load mission file {mission_file}")
+
+        # if px4, set home at first
+        if toolConfig.MODE == "PX4":
+            self.px4_set_home()
 
         if israndom:
             loader = self.random_mission(loader)
@@ -288,6 +308,14 @@ class FixMavlink(DroneMavlink):
                 'RatePitch': math.radians(msg.P),
                 'RateYaw': math.radians(msg.Y),
             }
+        elif msg.get_type() == 'POS':
+            out = {
+                'TimeS': msg.TimeUS / 1000000,
+                # deglongtitude
+                'Lat': msg.Lat,
+                'Lng': msg.Lng,
+                'Alt': msg.Alt,
+            }
         elif msg.get_type() == 'IMU':
             out = {
                 'TimeS': msg.TimeUS / 1000000,
@@ -297,6 +325,21 @@ class FixMavlink(DroneMavlink):
                 'GyrX': msg.GyrX,
                 'GyrY': msg.GyrY,
                 'GyrZ': msg.GyrZ,
+            }
+        elif msg.get_type() == 'VIBE':
+            out = {
+                'TimeS': msg.TimeUS / 1000000,
+                # m/s^2
+                'VibeX': msg.VibeX,
+                'VibeY': msg.VibeY,
+                'VibeZ': msg.VibeZ,
+            }
+        elif msg.get_type() == 'MAG':
+            out = {
+                'TimeS': msg.TimeUS / 1000000,
+                'MagX': msg.MagX,
+                'MagY': msg.MagY,
+                'MagZ': msg.MagZ,
             }
         elif msg.get_type() == 'PARM':
             out = {
@@ -323,11 +366,11 @@ class FixMavlink(DroneMavlink):
             msg = logs.recv_match(type=accept_item)
             if msg is None:
                 break
-            if msg.get_type() == 'ATT':
+            if msg.get_type() in ['ATT', 'RATE', 'POS']:
                 out_data.append(FixMavlink.log_extract_apm(msg))
-            elif msg.get_type() == 'RATE':
+            elif msg.get_type() in ['IMU', 'MAG'] and msg.I == 0:
                 out_data.append(FixMavlink.log_extract_apm(msg))
-            elif msg.get_type() == 'IMU':  # and msg['I'] == 0:
+            elif msg.get_type() == 'VIBE' and msg.IMU == 0:
                 out_data.append(FixMavlink.log_extract_apm(msg))
             elif msg.get_type() == 'PARM' and msg.Name in accpet_param:
                 out_data.append(FixMavlink.log_extract_apm(msg))
@@ -349,17 +392,16 @@ class FixMavlink(DroneMavlink):
         df_array = df_array.fillna(method='ffill')
         df_array = df_array.dropna()
 
-        # Sort name
-        attitude_name = ['TimeS', 'Roll', 'Pitch', 'Yaw', 'RateRoll', 'RatePitch', 'RateYaw',
-                         'AccX', 'AccY', 'AccZ', 'GyrX', 'GyrY', 'GyrZ'
-                         ]
+        # Sort
+        order_name = toolConfig.STATUS_ORDER
         param_seq = FixMavlink.load_param().columns.to_list()
-        param_name = df_array.keys().difference(attitude_name).to_list()
+        param_name = df_array.keys().difference(order_name).to_list()
         param_name.sort(key=lambda item: param_seq.index(item))
         # Status value + Parameter name
-        attitude_name.extend(param_name)
+        order_name.extend(param_name)
+        df_array = df_array[order_name]
         # Switch sequence and return
-        return df_array[attitude_name]
+        return df_array
 
     @staticmethod
     def read_path_specified_file(log_path, exe):
@@ -376,9 +418,10 @@ class FixMavlink(DroneMavlink):
         return file_list
 
     @staticmethod
-    def extract_from_log_path(log_path, threat=None):
+    def extract_from_log_path(log_path, skip=True, threat=None):
         """
         extract and convert bin file to csv
+        :param skip:
         :param log_path:
         :param threat: multiple threat
         :return:
@@ -388,34 +431,40 @@ class FixMavlink(DroneMavlink):
         if not os.path.exists(f"{log_path}/csv"):
             os.makedirs(f"{log_path}/csv")
 
-        # 列出文件夹内所有.BIN结尾的文件并排序
-        for file in tqdm(file_list):
-            name, _ = file.split('.')
-            if os.path.exists(f'{log_path}/csv/{name}.csv'):
-                continue
-            # extract
-            try:
-                csv_data = FixMavlink.extract_from_log_file(log_path + f'/{file}')
-                csv_data.to_csv(f'{log_path}/csv/{name}.csv', index=False)
-            except Exception as e:
-                logging.warning(f"Error processing {file} : {e}")
-                continue
+        # multiple
+        if threat is not None:
+            arrays = np.array_split(file_list, threat)
+            threat_manage = []
+            ray.init(include_dashboard=False)
+
+            for array in arrays:
+                threat_manage.append(FixMavlink.extract_from_log_path_threat.remote(log_path, array, skip))
+            ray.get(threat_manage)
+            ray.shutdown()
+        else:
+            # 列出文件夹内所有.BIN结尾的文件并排序
+            for file in tqdm(file_list):
+                name, _ = file.split('.')
+                if skip and os.path.exists(f'{log_path}/csv/{name}.csv'):
+                    continue
+                # extract
+                try:
+                    csv_data = FixMavlink.extract_from_log_file(log_path + f'/{file}')
+                    csv_data.to_csv(f'{log_path}/csv/{name}.csv', index=False)
+                except Exception as e:
+                    logging.warning(f"Error processing {file} : {e}")
+                    continue
 
     @staticmethod
     @ray.remote
-    def extract_from_log_path_threat(log_path, file_list):
+    def extract_from_log_path_threat(log_path, file_list, skip):
         for file in file_list:
             name, _ = file.split('.')
-            # if os.path.exists(f'{log_path}/csv/{name}.csv'):
-            #     continue
+            if skip and os.path.exists(f'{log_path}/csv/{name}.csv'):
+                continue
             csv_data = FixMavlink.extract_from_log_file(log_path + f'/{file}')
-            # 只保留一位小数
-            # csv_data = csv_data[['TimeS', 'Roll', 'Pitch', 'Yaw', 'RateRoll', 'RatePitch', 'RateYaw',
-            #                      'DesRoll', 'DesPitch', 'DesYaw', 'DesRateRoll', 'DesRatePitch', 'DesRateYaw']]
             csv_data.to_csv(f'{log_path}/csv/{name}.csv', index=False)
             print(f"\r{log_path} Process: {name}")
-        if os.path.exists(f'{log_path}/mark.pkl'):
-            shutil.copyfile(f'{log_path}/mark.pkl', f'{log_path}/csv/mark.pkl')
         return True
 
     @staticmethod
@@ -508,7 +557,7 @@ class FixMavlink(DroneMavlink):
         if not self._master:
             raise ValueError('Connect at first!')
         try:
-            with eventlet.Timeout(timeout, exception=RuntimeError):
+            with eventlet.Timeout(timeout, exception=TimeoutError):
                 while True:
                     message = self._master.recv_match(type=['STATUSTEXT'], blocking=True, timeout=30)
                     if message is None:
@@ -587,6 +636,14 @@ class FlyFixMavlink(DroneMavlink):
         # Drop nan
         df_array = df_array.fillna(method='ffill')
         df_array = df_array.dropna()
+        # Order
+        order_name = toolConfig.STATUS_ORDER
+        param_seq = FixMavlink.load_param().columns.to_list()
+        param_name = df_array.keys().difference(order_name).to_list()
+        param_name.sort(key=lambda item: param_seq.index(item))
+        # Status value + Parameter name
+        order_name.extend(param_name)
+        df_array = df_array[order_name]
 
         return df_array
 
@@ -638,6 +695,7 @@ class FlyFixMavlink(DroneMavlink):
         :param status_data: status patch containing parameters
         :return: True : stability False: instability
         """
+
         # create predicted status of this status patch
         predicted_data = self.predict_status(status_data)
         # calculate deviation between real and predicted
@@ -647,8 +705,9 @@ class FlyFixMavlink(DroneMavlink):
             return False
         return True
 
-    def repair_configuration(self):
+    def repair_configuration(self, status_data):
         # TODO
+        logging.info("Start repair process")
         pass
 
     @staticmethod
@@ -681,6 +740,25 @@ class FlyFixMavlink(DroneMavlink):
                 'GyrX': msg.xgyro,
                 'GyrY': msg.ygyro,
                 'GyrZ': msg.zgyro,
+                'MagX': msg.xmag,
+                'MagY': msg.ymag,
+                'MagZ': msg.zmag,
+            }
+        elif msg.name == 'GLOBAL_POSITION_INT':
+            out = {
+                'TimeS': msg.time_boot_ms / 1000,
+                # longtitude
+                'Lat': msg.lat,
+                'Lng': msg.lon,
+                'Alt': msg.alt,
+            }
+        elif msg.name == 'VIBRATION':
+            out = {
+                'TimeS': msg.time_usec / 1000000,
+                # levels
+                'VibeX': msg.vibration_x,
+                'VibeY': msg.vibration_y,
+                'VibeZ': msg.vibration_z
             }
         return out
 
@@ -690,19 +768,20 @@ class FlyFixMavlink(DroneMavlink):
         As different message have different time unit. It needs to convert to same second unit.
         :return:
         """
-        if msg.name == "ATTITUDE":
+        if msg.name in ["ATTITUDE", "GLOBAL_POSITION_INT"]:
             return msg.time_boot_ms / 1000
-        if msg.name == "RAW_IMU":
+        if msg.name in ["RAW_IMU", "VIBRATION"]:
             return msg.time_usec / 1000000
 
-    def online_monitor(self):
+    def online_monitor(self, pitch_size_s=2):
         # Sample a patch
-        status_data = self.read_status_patch(2, ["ATTITUDE", "RAW_IMU"])
+        status_data = self.read_status_patch(pitch_size_s, toolConfig.OL_LOG_MAP)
         # Detect
         result = self.detect_instability(status_data)
 
         if result is False:
-            self.repair_configuration()
+            logging.info("Detect instability caused by current configuration.")
+            self.repair_configuration(status_data)
 
     def wait_complete(self):
         if not self._master:

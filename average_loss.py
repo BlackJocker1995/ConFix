@@ -6,6 +6,12 @@ from ModelFit.approximate import CyLSTM
 
 
 def reject_outliers(data, m=2):
+    """
+    three sigma filter
+    :param data:
+    :param m:
+    :return:
+    """
     return data[abs(data - np.mean(data)) < m * np.std(data)]
 
 
@@ -24,4 +30,4 @@ if __name__ == '__main__':
 
     patch_array_loss = reject_outliers(patch_array_loss, 3)
 
-    print()
+    print(patch_array_loss)

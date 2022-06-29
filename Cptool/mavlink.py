@@ -306,14 +306,14 @@ class FixMavlink(DroneMavlink):
                 'RatePitch': math.radians(msg.P),
                 'RateYaw': math.radians(msg.Y),
             }
-        elif msg.get_type() == 'POS':
-            out = {
-                'TimeS': msg.TimeUS / 1000000,
-                # deglongtitude
-                'Lat': msg.Lat,
-                'Lng': msg.Lng,
-                'Alt': msg.Alt,
-            }
+        # elif msg.get_type() == 'POS':
+        #     out = {
+        #         'TimeS': msg.TimeUS / 1000000,
+        #         # deglongtitude
+        #         'Lat': msg.Lat,
+        #         'Lng': msg.Lng,
+        #         'Alt': msg.Alt,
+        #     }
         elif msg.get_type() == 'IMU':
             out = {
                 'TimeS': msg.TimeUS / 1000000,
@@ -364,7 +364,7 @@ class FixMavlink(DroneMavlink):
             msg = logs.recv_match(type=accept_item)
             if msg is None:
                 break
-            if msg.get_type() in ['ATT', 'RATE', 'POS']:
+            if msg.get_type() in ['ATT', 'RATE']:
                 out_data.append(FixMavlink.log_extract_apm(msg))
             elif msg.get_type() in ['IMU', 'MAG'] and msg.I == 0:
                 out_data.append(FixMavlink.log_extract_apm(msg))
@@ -702,14 +702,14 @@ class FlyFixMavlink(DroneMavlink):
                 'MagY': msg.ymag,
                 'MagZ': msg.zmag,
             }
-        elif msg.name == 'GLOBAL_POSITION_INT':
-            out = {
-                'TimeS': msg.time_boot_ms / 1000,
-                # longtitude
-                'Lat': msg.lat,
-                'Lng': msg.lon,
-                'Alt': msg.alt,
-            }
+        # elif msg.name == 'GLOBAL_POSITION_INT':
+        #     out = {
+        #         'TimeS': msg.time_boot_ms / 1000,
+        #         # longtitude
+        #         'Lat': msg.lat,
+        #         'Lng': msg.lon,
+        #         'Alt': msg.alt,
+        #     }
         elif msg.name == 'VIBRATION':
             out = {
                 'TimeS': msg.time_usec / 1000000,
@@ -726,7 +726,7 @@ class FlyFixMavlink(DroneMavlink):
         As different message have different time unit. It needs to convert to same second unit.
         :return:
         """
-        if msg.name in ["ATTITUDE", "GLOBAL_POSITION_INT"]:
+        if msg.name in ["ATTITUDE"]: # "GLOBAL_POSITION_INT"
             return msg.time_boot_ms / 1000
         if msg.name in ["RAW_IMU", "VIBRATION"]:
             return msg.time_usec / 1000000

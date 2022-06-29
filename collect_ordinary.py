@@ -25,7 +25,7 @@ if __name__ == '__main__':
     manager = FixSimManager(debug=toolConfig.DEBUG)
 
     time.sleep(1)
-    while least() < 500:
+    while least() < 100:
         time.sleep(0.5)
         log_index = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/LASTLOG.TXT"
         if os.path.exists(log_index):
@@ -39,7 +39,7 @@ if __name__ == '__main__':
 
         manager.mav_monitor_init(FixMavlink)
 
-        manager.mav_monitor.set_mission('Cptool/fitCollection.txt', False)
+        manager.mav_monitor.set_mission('Cptool/mission.txt', True)
 
         manager.mav_monitor.start_mission()
 

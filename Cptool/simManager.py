@@ -74,9 +74,12 @@ class SimManager(object):
                 cmd = f'python3 /home/rain/ardupilot/Tools/autotest/sim_vehicle.py -f gazebo-iris -v ArduCopter ' \
                       f'--out=127.0.0.1:14550 -S {toolConfig.SPEED}'
             if toolConfig.SIM == 'SITL':
-                cmd = f"python3 /home/rain/ardupilot/Tools/autotest/sim_vehicle.py --location=AVC_plane " \
+                if toolConfig.HOME is not None:
+                    cmd = f"python3 /home/rain/ardupilot/Tools/autotest/sim_vehicle.py --location={toolConfig.HOME} " \
                       f"--out=127.0.0.1:14550 --out=127.0.0.1:14540 -v ArduCopter -w -S {toolConfig.SPEED} "
-
+                else:
+                    cmd = f"python3 /home/rain/ardupilot/Tools/autotest/sim_vehicle.py " \
+                          f"--out=127.0.0.1:14550 --out=127.0.0.1:14540 -v ArduCopter -w -S {toolConfig.SPEED} "
             self._sitl_task = pexpect.spawn(cmd, cwd=toolConfig.ARDUPILOT_LOG_PATH, timeout=30, encoding='utf-8')
 
         if toolConfig.MODE == 'PX4':

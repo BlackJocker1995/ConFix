@@ -26,6 +26,8 @@ toolConfig.MODE = 'Ardupilot' #"PX4" #
 toolConfig.SIM = "SITL" # "Jmavsim"
 # Simulation Speed
 toolConfig.SPEED = 3
+# Flight home (None, AVC_plane)
+toolConfig.HOME = None # "AVC_plane"
 # Output Debug Message
 toolConfig.DEBUG = False
 # Wind Speed range
@@ -42,12 +44,12 @@ toolConfig.ARDUPILOT_LOG_PATH = '/media/rain/data'
 toolConfig.PX4_LOG_PATH = '/home/rain/PX4-Autopilot'
 if toolConfig.MODE == "Ardupilot":
     # Mavlink Part
-    toolConfig.LOG_MAP = ['IMU', 'ATT', 'RATE', 'PARM', 'VIBE', 'POS', "MAG"]
+    toolConfig.LOG_MAP = ['IMU', 'ATT', 'RATE', 'PARM', 'VIBE', "MAG"] # "POS"
     # Online Mavlink Part
     toolConfig.OL_LOG_MAP = ['ATTITUDE', 'RAW_IMU', 'GLOBAL_POSITION_INT', 'VIBRATION']
     # Status Order
     toolConfig.STATUS_ORDER = ['TimeS', 'Roll', 'Pitch', 'Yaw', 'RateRoll', 'RatePitch', 'RateYaw',
-                           'Lat', 'Lng', 'Alt',
+                           #'Lat', 'Lng', 'Alt',
                            'AccX', 'AccY', 'AccZ', 'GyrX', 'GyrY', 'GyrZ',
                            'MagX', 'MagY', 'MagZ', 'VibeX', 'VibeY', 'VibeZ']
 elif toolConfig.MODE == "PX4":

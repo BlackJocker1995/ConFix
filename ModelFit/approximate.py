@@ -11,9 +11,11 @@ import pandas as pd
 from keras.layers import Dense, Dropout, RepeatVector
 from keras.layers import LSTM
 from keras.models import Sequential
+from numpy.lib.stride_tricks import sliding_window_view
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.python.keras.models import load_model
+from tqdm import tqdm
 
 from Cptool.config import toolConfig
 from ModelFit.config import modelConfig
@@ -42,7 +44,6 @@ class Modeling(object):
 
         if modelConfig.RETRANS:
             trans = self.load_trans()
-
             values = trans.transform(values)
 
         # frame as supervised learning
@@ -85,7 +86,7 @@ class Modeling(object):
 
     def _train_valid_split(self, values):
         # split into train and test sets
-        X, Y = self._data_split(values)
+        X, Y = self.data_split(values)
         train_X, valid_X, train_Y, valid_Y = train_test_split(X, Y, test_size=0.2, random_state=0)
 
         logging.info(f"Shape: {train_X.shape}, {train_Y.shape}, {valid_X.shape}, {valid_Y.shape}")
@@ -93,12 +94,12 @@ class Modeling(object):
         return train_X, train_Y, valid_X, valid_Y
 
     def _test_split(self, values):
-        X, Y = self._data_split(values)
+        X, Y = self.data_split(values)
         logging.info(f"Shape: {X.shape}, {Y.shape}")
         return X, Y
 
     @abstractmethod
-    def _data_split(self, value):
+    def data_split(self, value):
         pass
 
     @abstractmethod
@@ -152,6 +153,45 @@ class Modeling(object):
 
         return predict_X
 
+    def predict_status(self, status_data: pd.DataFrame):
+        """
+        convert the status and predict
+        :param status_data:
+        :return:
+        """
+        if self._model is None:
+            logging.warning('Model is not trained!')
+            raise ValueError('Train or load model at first')
+        # if contain TimeS index, remove
+        if status_data.columns[0] == "TimeS":
+            status_numpy = status_data.to_numpy()[:, 1:]
+        else:
+            status_numpy = status_data.to_numpy()
+        # Convert
+        if modelConfig.RETRANS:
+            trans = Modeling.load_trans()
+            status_numpy = trans.transform(status_numpy)
+        # split
+        status_numpy = Modeling.series2segment_predict(status_numpy)
+        # predict each status
+        predict_status = self._model.predict(status_numpy)
+
+        return predict_status
+
+    def predict_feature(self, feature_data):
+        """
+        predict feature which has been pre-processed
+        :param feature_data:
+        :return:
+        """
+        if self._model is None:
+            logging.warning('Model is not trained!')
+            raise ValueError('Train or load model at first')
+        # predict each status
+        predict_feature = self._model.predict(feature_data)
+
+        return predict_feature
+
     def test_cmp_draw(self, test, cmp_name, num=150, exec='pdf'):
         if self._model is None:
             logging.warning('Model is not trained!')
@@ -160,7 +200,7 @@ class Modeling(object):
             os.makedirs(f'{os.getcwd()}/fig/{toolConfig.MODE}/{self.in_out}/{cmp_name}')
 
         values = self._cs_to_sl(test)
-        X, Y = self._data_split(values)
+        X, Y = self.data_split(values)
 
         predict_y = self._model.predict(X)
         # if self._resize:
@@ -267,7 +307,7 @@ class Modeling(object):
 
         values = self._cs_to_sl(values)
 
-        X, Y = self._data_split(values)
+        X, Y = self.data_split(values)
 
         for i in range(5):
             _, X_other, _, y_other = train_test_split(X, Y, test_size=0.2, random_state=5 + i,
@@ -339,9 +379,10 @@ class Modeling(object):
         return trans
 
     @staticmethod
-    def series2segment_predict(data, dropnan=True):
+    def series2segment_predict(data, has_param=False, dropnan=True):
         """
         trans a numpy array data to segments. like (6, 32) to 3 (4,32) e.g., (3, 4, 32)
+        :param has_param:
         :param data:
         :param dropnan:
         :return:
@@ -361,6 +402,46 @@ class Modeling(object):
             agg.dropna(inplace=True)
         return agg.to_numpy().reshape((-1, modelConfig.INPUT_LEN, modelConfig.DATA_LEN))
 
+    @classmethod
+    def cal_patch_deviation(cls, status_data, predicted_data):
+        """
+        calculate matrix deviation between status_data and predicted data
+        :param status_data: real flight status data
+        :param predicted_data: predicted data
+        :return: status_deviation result which has been normalized
+        """
+        ground_true_data = status_data[:-predicted_data.shape[0], :-modelConfig.PARAM_LEN]
+        status_deviation = np.abs(ground_true_data - predicted_data)
+
+        # normalization
+        trans = cls.load_trans()
+        # tmp param values
+        tmp_param = status_data[0, 0][-modelConfig.PARAM_LEN:]
+        # merge
+        status_deviation = np.c_[status_deviation, np.tile(tmp_param, (status_deviation.shape[0], 1))]
+        # trans
+        status_deviation = trans.transform(status_deviation)
+        # drop param value
+        status_deviation = status_deviation[:, :-modelConfig.PARAM_LEN]
+
+        return status_deviation
+
+    @classmethod
+    def loss_discriminate(cls, patch_deviation: np.ndarray, loss_patch_size=5) -> np.ndarray:
+        patch_array = sliding_window_view(patch_deviation, loss_patch_size, axis=0)
+        patch_array_loss = patch_array.sum(axis=1).sum(axis=1)
+        return patch_array_loss
+
+    def cal_average_loss(self, status_data):
+        # create predicted status of this status patch
+        predicted_data = self.predict(status_data)
+        # calculate deviation between real and predicted
+        patch_deviation = self.cal_patch_deviation(status_data, predicted_data)
+
+        # average
+        average_loss = patch_deviation.sum()
+
+
 class CyLSTM(Modeling):
     def __init__(self, epochs: int, batch_size: int, debug: bool = False):
         super(CyLSTM, self).__init__(batch_size, debug)
@@ -369,7 +450,7 @@ class CyLSTM(Modeling):
         self.epochs = epochs
         self.batch_size: int = batch_size
 
-    def _data_split(self, value):
+    def data_split(self, value):
         values = value.values
 
         # split into input and outputs
@@ -450,7 +531,7 @@ class CyLSTM(Modeling):
             if index == 0:
                 pd_array = values
             else:
-                pd_array = pd_array.append(values)
+                pd_array = pd.concat([pd_array, values])
         return pd_array
 
     @classmethod
@@ -464,9 +545,9 @@ class CyLSTM(Modeling):
         col_name = pd.read_csv(f"{dir}/{file_list[0]}").columns
         pd_csv = pd.DataFrame(columns=col_name)
 
-        for filename in file_list:
+        for filename in tqdm(file_list):
             data = pd.read_csv(f"{dir}/{filename}")
-            pd_csv = pd_csv.append(data)
+            pd_csv = pd.concat([pd_csv, data])
         # remove Times
         return pd_csv.drop(["TimeS"], axis=1)
 
@@ -479,7 +560,7 @@ class CyTCN(Modeling):
         self.epochs = epochs
         self.batch_size: int = batch_size
 
-    def _data_split(self, value):
+    def data_split(self, value):
         values = value.values
 
         # split into input and outputs

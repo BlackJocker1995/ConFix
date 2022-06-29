@@ -12,7 +12,7 @@ modelConfig.MODE = 'Ardupilot'
 modelConfig.DEBUG = False
 
 # Status 长度
-modelConfig.STATUS_LEN = len(toolConfig.STATUS_ORDER)
+modelConfig.STATUS_LEN = len(toolConfig.STATUS_ORDER) - 1
 
 # Parameter的长度
 modelConfig.PARAM_LEN = len(toolConfig.PARAM)

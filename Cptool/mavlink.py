@@ -4,8 +4,7 @@ import math
 import multiprocessing
 import os
 import random
-import shutil
-import eventlet
+import time
 
 import numpy as np
 import pandas as pd
@@ -18,7 +17,6 @@ from tqdm import tqdm
 
 from Cptool.config import toolConfig
 from ModelFit.approximate import Modeling, CyLSTM
-from ModelFit.config import modelConfig
 
 
 class DroneMavlink(multiprocessing.Process):
@@ -374,7 +372,6 @@ class FixMavlink(DroneMavlink):
                 out_data.append(FixMavlink.log_extract_apm(msg))
             elif msg.get_type() == 'PARM' and msg.Name in accpet_param:
                 out_data.append(FixMavlink.log_extract_apm(msg))
-
         pd_array = pd.DataFrame(out_data)
 
         # Remain timestamp .1 and drop duplicate
@@ -387,7 +384,7 @@ class FixMavlink(DroneMavlink):
             # fillna
             group_item = group_item.fillna(method='ffill')
             group_item = group_item.fillna(method='bfill')
-            df_array = df_array.append(group_item.mean(), ignore_index=True)
+            df_array.loc[len(df_array.index)] = group_item.mean()
         # Drop nan
         df_array = df_array.fillna(method='ffill')
         df_array = df_array.dropna()
@@ -435,7 +432,7 @@ class FixMavlink(DroneMavlink):
         if threat is not None:
             arrays = np.array_split(file_list, threat)
             threat_manage = []
-            ray.init(include_dashboard=False)
+            ray.init(include_dashboard=True, dashboard_host="10.0.0.14", dashboard_port=8088)
 
             for array in arrays:
                 threat_manage.append(FixMavlink.extract_from_log_path_threat.remote(log_path, array, skip))
@@ -458,13 +455,16 @@ class FixMavlink(DroneMavlink):
     @staticmethod
     @ray.remote
     def extract_from_log_path_threat(log_path, file_list, skip):
-        for file in file_list:
+        for file in tqdm(file_list):
             name, _ = file.split('.')
             if skip and os.path.exists(f'{log_path}/csv/{name}.csv'):
                 continue
-            csv_data = FixMavlink.extract_from_log_file(log_path + f'/{file}')
-            csv_data.to_csv(f'{log_path}/csv/{name}.csv', index=False)
-            print(f"\r{log_path} Process: {name}")
+            try:
+                csv_data = FixMavlink.extract_from_log_file(log_path + f'/{file}')
+                csv_data.to_csv(f'{log_path}/csv/{name}.csv', index=False)
+            except Exception as e:
+                logging.warning(f"Error processing {file} : {e}")
+                continue
         return True
 
     @staticmethod
@@ -557,32 +557,32 @@ class FixMavlink(DroneMavlink):
         if not self._master:
             raise ValueError('Connect at first!')
         try:
-            with eventlet.Timeout(timeout, exception=TimeoutError):
-                while True:
-                    message = self._master.recv_match(type=['STATUSTEXT'], blocking=True, timeout=30)
-                    if message is None:
-                        continue
-                    message = message.to_dict()
-                    out_msg = "None"
-                    line = message['text']
-                    if message["severity"] == 6:
-                        if "Land" in line:
-                            # if successful landed, break the loop and return true
-                            logging.info(f"Successful break the loop.")
-                            return True
-                    elif message["severity"] == 2 or message["severity"] == 0:
-                        # Appear error, break loop and return false
-                        if "SIM Hit ground at" in line:
-                            pass
-                        elif "Potential Thrust Loss" in line:
-                            pass
-                        elif "PreArm" in line:
-                            pass
-                            # will not generate log file
-                            logging.info(f"Get error with {message['text']}")
-                            return True
+            timeout_start = time.time()
+            while time.time() < timeout_start + timeout:
+                message = self._master.recv_match(type=['STATUSTEXT'], blocking=True, timeout=30)
+                if message is None:
+                    continue
+                message = message.to_dict()
+                out_msg = "None"
+                line = message['text']
+                if message["severity"] == 6:
+                    if "Land" in line:
+                        # if successful landed, break the loop and return true
+                        logging.info(f"Successful break the loop.")
+                        return True
+                elif message["severity"] == 2 or message["severity"] == 0:
+                    # Appear error, break loop and return false
+                    if "SIM Hit ground at" in line:
+                        pass
+                    elif "Potential Thrust Loss" in line:
+                        pass
+                    elif "PreArm" in line:
+                        pass
+                        # will not generate log file
                         logging.info(f"Get error with {message['text']}")
-                        return False
+                        return True
+                    logging.info(f"Get error with {message['text']}")
+                    return False
         except TimeoutError:
             # Mission point time out, change other params
             logging.warning('Wp timeout!')
@@ -590,7 +590,7 @@ class FixMavlink(DroneMavlink):
         except KeyboardInterrupt:
             logging.info('Key bordInterrupt! exit')
             return False
-        return True
+        return False
 
 
 class FlyFixMavlink(DroneMavlink):
@@ -647,48 +647,6 @@ class FlyFixMavlink(DroneMavlink):
 
         return df_array
 
-    def predict_status(self, status_data):
-        if self.predictor is None:
-            logging.warning('Predictor is not set!')
-            raise ValueError('Train or load model at first')
-        # Convert
-        status_numpy = status_data.to_numpy()[:, 1:]
-        if modelConfig.RETRANS:
-            trans = self.predictor.load_trans()
-            status_numpy = trans.transform(status_numpy)
-        # split
-        status_numpy = self.predictor.series2segment_predict(status_numpy)
-        # predict each status
-        predict_status = self.predictor.predict(status_numpy)
-
-        return predict_status
-
-    def cal_patch_deviation(self, status_data, predicted_data):
-        """
-        calculate matrix deviation between status_data and predicted data
-        :param status_data: real flight status data
-        :param predicted_data: predicted data
-        :return: status_deviation result which has been normalized
-        """
-        ground_true_data = status_data[:-predicted_data.shape[0], :-toolConfig.PARAM_LEN]
-        status_deviation = np.abs(ground_true_data - predicted_data)
-
-        # normalization
-        trans = self.predictor.load_trans()
-        # tmp param values
-        tmp_param = status_data[0, 0][-modelConfig.PARAM_LEN:]
-        # merge
-        status_deviation = np.c_[status_deviation, np.tile(tmp_param, (status_deviation.shape[0], 1))]
-        # trans
-        status_deviation = trans.transform(status_deviation)
-        # drop param value
-        status_deviation = status_deviation[:, :-modelConfig.PARAM_LEN]
-
-        return status_deviation
-
-    def loss_discriminate(self, patch_deviation):
-        pass
-
     def detect_instability(self, status_data) -> bool:
         """
         detect whether this status becomes instability
@@ -697,11 +655,11 @@ class FlyFixMavlink(DroneMavlink):
         """
 
         # create predicted status of this status patch
-        predicted_data = self.predict_status(status_data)
+        predicted_data = self.predictor.predict_status(status_data)
         # calculate deviation between real and predicted
-        patch_deviation = self.cal_patch_deviation(status_data, predicted_data)
+        patch_deviation = Modeling.cal_patch_deviation(status_data, predicted_data)
         # discriminated if pass
-        if not self.loss_discriminate(patch_deviation):
+        if not Modeling.loss_discriminate(patch_deviation):
             return False
         return True
 

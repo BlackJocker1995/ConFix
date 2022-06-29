@@ -3,11 +3,9 @@ SimManager Version: 3.3
 """
 import logging
 import multiprocessing
-import re
-import threading
-import time, os
+import os
+import time
 
-import eventlet
 import pexpect
 from pexpect import spawn
 
@@ -83,9 +81,9 @@ class SimManager(object):
 
         if toolConfig.MODE == 'PX4':
             pre_argv = f"PX4_HOME_LAT=40.072842 " \
-                  f"PX4_HOME_LON=-105.230575 " \
-                  f"PX4_HOME_ALT=0 " \
-                  f"PX4_SIM_SPEED_FACTOR={toolConfig.SPEED} "
+                       f"PX4_HOME_LON=-105.230575 " \
+                       f"PX4_HOME_ALT=0 " \
+                       f"PX4_SIM_SPEED_FACTOR={toolConfig.SPEED} "
             if toolConfig.SIM == 'Airsim':
                 cmd = f'make {pre_argv} px4_sitl_default none_iris'
             if toolConfig.SIM == 'Jmavsim':

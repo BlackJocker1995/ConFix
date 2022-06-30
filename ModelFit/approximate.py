@@ -162,21 +162,16 @@ class Modeling(object):
         if self._model is None:
             logging.warning('Model is not trained!')
             raise ValueError('Train or load model at first')
-        # if contain TimeS index, remove
-        if status_data.columns[0] == "TimeS":
-            status_numpy = status_data.to_numpy()[:, 1:]
-        else:
-            status_numpy = status_data.to_numpy()
-        # Convert
-        if modelConfig.RETRANS:
-            trans = Modeling.load_trans()
-            status_numpy = trans.transform(status_numpy)
-        # split
-        status_numpy = Modeling.series2segment_predict(status_numpy)
-        # predict each status
-        predict_status = self._model.predict(status_numpy)
 
-        return predict_status
+        data = status_data.drop(["TimeS"], axis=1)
+        # extract patch
+        values = data.values
+        values = self._cs_to_sl(values)
+        X, predict_groundtruth = self.data_split(values)
+
+        predict_feature = self.predict_feature(X)
+
+        return predict_feature, predict_groundtruth
 
     def predict_feature(self, feature_data):
         """
@@ -403,27 +398,27 @@ class Modeling(object):
         return agg.to_numpy().reshape((-1, modelConfig.INPUT_LEN, modelConfig.DATA_LEN))
 
     @classmethod
-    def cal_patch_deviation(cls, status_data, predicted_data):
+    def cal_patch_deviation(cls, predicted_data, status_data):
         """
         calculate matrix deviation between status_data and predicted data
         :param status_data: real flight status data
         :param predicted_data: predicted data
         :return: status_deviation result which has been normalized
         """
-        ground_true_data = status_data[:-predicted_data.shape[0], :-modelConfig.PARAM_LEN]
-        status_deviation = np.abs(ground_true_data - predicted_data)
-
-        # normalization
-        trans = cls.load_trans()
-        # tmp param values
-        tmp_param = status_data[0, 0][-modelConfig.PARAM_LEN:]
-        # merge
-        status_deviation = np.c_[status_deviation, np.tile(tmp_param, (status_deviation.shape[0], 1))]
-        # trans
-        status_deviation = trans.transform(status_deviation)
-        # drop param value
-        status_deviation = status_deviation[:, :-modelConfig.PARAM_LEN]
-
+        # ground_true_data = status_data[:-predicted_data.shape[0], :-modelConfig.PARAM_LEN]
+        # status_deviation = np.abs(ground_true_data - predicted_data)
+        #
+        # # normalization
+        # trans = cls.load_trans()
+        # # tmp param values
+        # tmp_param = status_data[0, 0][-modelConfig.PARAM_LEN:]
+        # # merge
+        # status_deviation = np.c_[status_deviation, np.tile(tmp_param, (status_deviation.shape[0], 1))]
+        # # trans
+        # status_deviation = trans.transform(status_deviation)
+        # # drop param value
+        # status_deviation = status_deviation[:, :-modelConfig.PARAM_LEN]
+        status_deviation = np.abs(predicted_data - status_data)
         return status_deviation
 
     @classmethod

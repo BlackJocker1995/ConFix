@@ -28,6 +28,8 @@ class DroneMavlink(multiprocessing.Process):
         self._port = port
         self.takeoff = False
 
+    # Mavlink common operation
+
     def connect(self):
         """
         Connect drone
@@ -58,18 +60,6 @@ class DroneMavlink(multiprocessing.Process):
             # if toolConfig.MODE == "PX4":
             #     logging.debug("Ready to fly.")
             #     return True
-
-    def px4_set_home(self):
-        self._master.mav.command_long_send(self._master.mav.target_system, self._master.mav.target_componet,
-                                           mavutil.mavlink.MAV_CMD_DO_SET_HOME,
-                                           1,
-                                           0,
-                                           0,
-                                           0,
-                                           0,
-                                           40.072842,
-                                           -105.230575,
-                                           0)
 
     def set_mission(self, mission_file, israndom: bool = False, timeout=30) -> bool:
         """
@@ -205,15 +195,29 @@ class DroneMavlink(multiprocessing.Process):
                 logging.debug(f'Mode: {mode} Set successful')
                 break
 
+    # Special operation
     def set_random_param_and_start(self):
         param_configuration = self.create_random_params(toolConfig.PARAM)
         self.set_params(param_configuration)
         # Unlock the uav
         self.start_mission()
 
+    def px4_set_home(self):
+        self._master.mav.command_long_send(self._master.mav.target_system, self._master.mav.target_componet,
+                                           mavutil.mavlink.MAV_CMD_DO_SET_HOME,
+                                           1,
+                                           0,
+                                           0,
+                                           0,
+                                           0,
+                                           40.072842,
+                                           -105.230575,
+                                           0)
+
     def wait_complete(self):
         pass
 
+    # Static method
     @staticmethod
     def create_random_params(param_choice):
         para_dict = DroneMavlink.load_param()
@@ -282,6 +286,22 @@ class FixMavlink(DroneMavlink):
     def __init__(self, port, recv_msg_queue, send_msg_queue):
         super(FixMavlink, self).__init__(port, recv_msg_queue, send_msg_queue)
 
+    # Log analysis function
+    @staticmethod
+    def read_path_specified_file(log_path, exe):
+        """
+        :param log_path:
+        :param exe:
+        :return:
+        """
+        file_list = []
+        for filename in os.listdir(log_path):
+            if filename.endswith(f'.{exe}'):
+                file_list.append(filename)
+        file_list.sort()
+        return file_list
+
+    # Ardupilot
     @staticmethod
     def log_extract_apm(msg: DFMessage):
         """
@@ -347,7 +367,7 @@ class FixMavlink(DroneMavlink):
         return out
 
     @staticmethod
-    def extract_from_log_file(log_file):
+    def extract_log_file(log_file):
         """
         extract log message form a bin file.
         :param log_file:
@@ -401,21 +421,7 @@ class FixMavlink(DroneMavlink):
         return df_array
 
     @staticmethod
-    def read_path_specified_file(log_path, exe):
-        """
-        :param log_path:
-        :param exe:
-        :return:
-        """
-        file_list = []
-        for filename in os.listdir(log_path):
-            if filename.endswith(f'.{exe}'):
-                file_list.append(filename)
-        file_list.sort()
-        return file_list
-
-    @staticmethod
-    def extract_from_log_path(log_path, skip=True, threat=None):
+    def extract_log_path(log_path, skip=True, threat=None):
         """
         extract and convert bin file to csv
         :param skip:
@@ -435,7 +441,7 @@ class FixMavlink(DroneMavlink):
             ray.init(include_dashboard=True, dashboard_host="10.0.0.14", dashboard_port=8088)
 
             for array in arrays:
-                threat_manage.append(FixMavlink.extract_from_log_path_threat.remote(log_path, array, skip))
+                threat_manage.append(FixMavlink.extract_log_path_threat.remote(log_path, array, skip))
             ray.get(threat_manage)
             ray.shutdown()
         else:
@@ -446,7 +452,7 @@ class FixMavlink(DroneMavlink):
                     continue
                 # extract
                 try:
-                    csv_data = FixMavlink.extract_from_log_file(log_path + f'/{file}')
+                    csv_data = FixMavlink.extract_log_file(log_path + f'/{file}')
                     csv_data.to_csv(f'{log_path}/csv/{name}.csv', index=False)
                 except Exception as e:
                     logging.warning(f"Error processing {file} : {e}")
@@ -454,19 +460,20 @@ class FixMavlink(DroneMavlink):
 
     @staticmethod
     @ray.remote
-    def extract_from_log_path_threat(log_path, file_list, skip):
+    def extract_log_path_threat(log_path, file_list, skip):
         for file in tqdm(file_list):
             name, _ = file.split('.')
             if skip and os.path.exists(f'{log_path}/csv/{name}.csv'):
                 continue
             try:
-                csv_data = FixMavlink.extract_from_log_file(log_path + f'/{file}')
+                csv_data = FixMavlink.extract_log_file(log_path + f'/{file}')
                 csv_data.to_csv(f'{log_path}/csv/{name}.csv', index=False)
             except Exception as e:
                 logging.warning(f"Error processing {file} : {e}")
                 continue
         return True
 
+    # PX4
     @staticmethod
     def extract_from_ulog(log_file):
         """
@@ -522,6 +529,7 @@ class FixMavlink(DroneMavlink):
         }, inplace=True)
         return data
 
+    # Special function
     @staticmethod
     def random_param_value(param_json: dict):
         """
@@ -602,18 +610,22 @@ class FlyFixMavlink(DroneMavlink):
         self.predictor = CyLSTM(epochs, batch_size, toolConfig.DEBUG)
         self.predictor.read_model()
 
-    def read_status_patch(self, time_unit, status):
+    def read_status_patch_bin(self, time_unit: float, status):
+        pass
+
+    def read_status_patch(self, time_unit: float, status):
+        time_unit = float(time_unit)
         out_data = []
         first_msg = self._master.recv_match(type=status, blocking=True)
         out_data.append(FlyFixMavlink.runtime_extract_apm(first_msg))
-        first_time = FlyFixMavlink.get_time_index(first_msg)
+        first_time = float(FlyFixMavlink.get_time_index(first_msg))
         new_time = first_time
 
         # Collect data in one time_unit
-        while new_time <= first_time + time_unit:
+        while new_time < (first_time + time_unit):
             new_msg = self._master.recv_match(type=status, blocking=True)
             # Add and process
-            new_time = FlyFixMavlink.get_time_index(new_msg)
+            new_time = float(FlyFixMavlink.get_time_index(new_msg))
             out_data.append(FlyFixMavlink.runtime_extract_apm(new_msg))
 
         # Read current configuration
@@ -632,7 +644,7 @@ class FlyFixMavlink(DroneMavlink):
             # fillna
             group_item = group_item.fillna(method='ffill')
             group_item = group_item.fillna(method='bfill')
-            df_array = df_array.append(group_item.mean(), ignore_index=True)
+            df_array.loc[len(df_array.index)] = group_item.mean()
         # Drop nan
         df_array = df_array.fillna(method='ffill')
         df_array = df_array.dropna()
@@ -655,13 +667,16 @@ class FlyFixMavlink(DroneMavlink):
         """
 
         # create predicted status of this status patch
-        predicted_data = self.predictor.predict_status(status_data)
+        predict_feature, predict_groundtruth = self.predictor.predict_status(status_data)
         # calculate deviation between real and predicted
-        patch_deviation = Modeling.cal_patch_deviation(status_data, predicted_data)
+        patch_deviation = np.abs(predict_feature - predict_groundtruth)
         # discriminated if pass
-        if not Modeling.loss_discriminate(patch_deviation):
-            return False
-        return True
+        loss = Modeling.loss_discriminate(patch_deviation)
+        logging.debug(f"Patch loss: {loss}")
+        return False
+        # if loss > 1.88:
+        #     return False
+        # return True
 
     def repair_configuration(self, status_data):
         # TODO
@@ -731,15 +746,27 @@ class FlyFixMavlink(DroneMavlink):
         if msg.name in ["RAW_IMU", "VIBRATION"]:
             return msg.time_usec / 1000000
 
-    def online_monitor(self, pitch_size_s=2):
-        # Sample a patch
-        status_data = self.read_status_patch(pitch_size_s, toolConfig.OL_LOG_MAP)
-        # Detect
-        result = self.detect_instability(status_data)
+    def online_bin_monitor(self, pitch_size_s=3):
+        while True:
+            # Sample a patch
+            status_data = self.read_status_patch(pitch_size_s, toolConfig.OL_LOG_MAP)
+            # Detect
+            result = self.detect_instability(status_data)
 
-        if result is False:
-            logging.info("Detect instability caused by current configuration.")
-            self.repair_configuration(status_data)
+            if result is False:
+                logging.info("Detect instability caused by current configuration.")
+                self.repair_configuration(status_data)
+
+    def online_monitor(self, pitch_size_s=3):
+        while True:
+            # Sample a patch
+            status_data = self.read_status_patch(pitch_size_s, toolConfig.OL_LOG_MAP)
+            # Detect
+            result = self.detect_instability(status_data)
+
+            if result is False:
+                logging.info("Detect instability caused by current configuration.")
+                self.repair_configuration(status_data)
 
     def wait_complete(self):
         if not self._master:

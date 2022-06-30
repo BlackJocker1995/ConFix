@@ -3,7 +3,7 @@ import pandas as pd
 
 from Cptool.config import toolConfig
 from ModelFit.approximate import CyLSTM
-
+import matplotlib.pyplot as plt
 
 def reject_outliers(data, m=2):
     """
@@ -17,7 +17,7 @@ def reject_outliers(data, m=2):
 
 if __name__ == '__main__':
     cylstm = CyLSTM(100, 128)
-    feature = cylstm.extract_feature(f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/csv")
+    feature = pd.read_csv("model/features_ordinary.csv")
     cylstm.read_model()
 
     feature_x, feature_y = cylstm.data_split(feature)
@@ -30,4 +30,8 @@ if __name__ == '__main__':
 
     patch_array_loss = reject_outliers(patch_array_loss, 3)
 
-    print(patch_array_loss)
+    _ = plt.hist(patch_array_loss, bins='auto')
+
+    plt.show()
+
+    print(f"Max: {patch_array_loss.max()}  Min:{patch_array_loss.min()}")

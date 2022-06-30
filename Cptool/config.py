@@ -29,7 +29,7 @@ toolConfig.SPEED = 3
 # Flight home (None, AVC_plane)
 toolConfig.HOME = None # "AVC_plane"
 # Output Debug Message
-toolConfig.DEBUG = False
+toolConfig.DEBUG = True
 # Wind Speed range
 toolConfig.WIND_RANGE = [8, 10.7]
 # GUI Windows size
@@ -46,7 +46,7 @@ if toolConfig.MODE == "Ardupilot":
     # Mavlink Part
     toolConfig.LOG_MAP = ['IMU', 'ATT', 'RATE', 'PARM', 'VIBE', "MAG"] # "POS"
     # Online Mavlink Part
-    toolConfig.OL_LOG_MAP = ['ATTITUDE', 'RAW_IMU', 'GLOBAL_POSITION_INT', 'VIBRATION']
+    toolConfig.OL_LOG_MAP = ['ATTITUDE', 'RAW_IMU', 'VIBRATION'] # 'GLOBAL_POSITION_INT'
     # Status Order
     toolConfig.STATUS_ORDER = ['TimeS', 'Roll', 'Pitch', 'Yaw', 'RateRoll', 'RatePitch', 'RateYaw',
                            #'Lat', 'Lng', 'Alt',

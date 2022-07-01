@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-
+from ModelFit.approximate import Modeling
 from Cptool.config import toolConfig
 from ModelFit.approximate import CyLSTM
 import matplotlib.pyplot as plt
@@ -24,9 +24,9 @@ if __name__ == '__main__':
 
     predicted_feature = cylstm.predict_feature(feature_x)
 
-    status_deviation = np.abs(feature_y - predicted_feature)
+    patch_array_loss = Modeling.cal_patch_deviation(feature_y, predicted_feature)
 
-    patch_array_loss = CyLSTM.loss_discriminate(status_deviation)
+    # patch_array_loss = CyLSTM.loss_discriminate(status_deviation)
 
     # patch_array_loss = reject_outliers(patch_array_loss, 3)
 

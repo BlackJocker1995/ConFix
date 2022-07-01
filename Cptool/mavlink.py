@@ -635,7 +635,6 @@ class FlyFixMavlink(DroneMavlink):
         self.param_current.pop('TimeS')
         # logging.debug(f"Current parameters: {self.param_current}")
 
-
     def init_predictor(self, epochs, batch_size):
         self.predictor = CyLSTM(epochs, batch_size, toolConfig.DEBUG)
         self.predictor.read_model()
@@ -867,13 +866,17 @@ class FlyFixMavlink(DroneMavlink):
                 # Predict
                 predicted_feature = self.predictor.predict_feature(feature_x)
                 # deviation
-                status_deviation = np.abs(feature_y - predicted_feature)
-                # loss
-                patch_array_loss = CyLSTM.loss_discriminate(status_deviation)
+                patch_array_loss = self.predictor.cal_patch_deviation(predicted_feature, feature_y)
+                # # loss
+                # patch_array_loss = Modeling.loss_discriminate(status_deviation)
 
-                logging.info(f"Patch average loss: {np.average(patch_array_loss)}")
+                logging.info(f"Time {status_data['TimeS'].iloc[0]} status's patch average loss: {np.average(patch_array_loss)}")
+
+                if np.average(patch_array_loss) > 10.1:
+                    self.repair_configuration()
+
             except Exception as e:
-                logging.warning(f"Warning {e}, then continue looping")
+                logging.warning(f"{e}, then continue looping")
 
             # Drop old message
             while True:

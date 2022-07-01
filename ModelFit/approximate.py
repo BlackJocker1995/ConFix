@@ -8,10 +8,12 @@ from abc import abstractmethod
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from dtaidistance import dtw, dtw_ndim
 from keras.layers import Dense, Dropout, RepeatVector
 from keras.layers import LSTM
 from keras.models import Sequential
 from numpy.lib.stride_tricks import sliding_window_view
+from scipy.spatial.distance import euclidean
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.python.keras.models import load_model
@@ -192,15 +194,15 @@ class Modeling(object):
 
         if X.shape[0] > num:
             col = self._systematicSampling(X, num)
-            #col = np.arange(200, 400)
+            # col = np.arange(200, 400)
             predict_y = predict_y[col, :]
             test = Y[col, :]
         else:
             test = Y
         # 'AccX', 'AccY', 'AccZ',
-        for name, i in zip(['Roll', 'Pitch', 'Yaw', 'RateRoll', 'RatePitch', 'RateYaw',], range(6)):
-            x = predict_y[:,  i]
-            y = test[:,  i]
+        for name, i in zip(['Roll', 'Pitch', 'Yaw', 'RateRoll', 'RatePitch', 'RateYaw', ], range(6)):
+            x = predict_y[:, i]
+            y = test[:, i]
 
             fig = plt.figure(figsize=(8, 5))
             ax1 = plt.subplot()
@@ -242,7 +244,8 @@ class Modeling(object):
         if not os.path.exists(f'{os.getcwd()}/fig/{toolConfig.MODE}/{self.in_out}/{cmp_name}'):
             os.makedirs(f'{os.getcwd()}/fig/{toolConfig.MODE}/{self.in_out}/{cmp_name}')
 
-        for name, i in zip(['AccX', 'AccY', 'AccZ', 'Roll', 'Pitch', 'Yaw', 'RateRoll', 'RatePitch', 'RateYaw',], range(9)):
+        for name, i in zip(['AccX', 'AccY', 'AccZ', 'Roll', 'Pitch', 'Yaw', 'RateRoll', 'RatePitch', 'RateYaw', ],
+                           range(9)):
             x = X[:, i]
             y = Y[:, i]
 
@@ -274,7 +277,9 @@ class Modeling(object):
 
             plt.margins(0, 0)
             plt.gcf().subplots_adjust(bottom=0.12)
-            plt.savefig(f'{os.getcwd()}/fig/{modelConfig.MODE}/{modelConfig.INPUT_LEN}/{cmp_name}/{name.lower()}.{exec}', dpi=300)
+            plt.savefig(
+                f'{os.getcwd()}/fig/{modelConfig.MODE}/{modelConfig.INPUT_LEN}/{cmp_name}/{name.lower()}.{exec}',
+                dpi=300)
             # plt.show()
             plt.clf()
 
@@ -392,21 +397,15 @@ class Modeling(object):
         :param predicted_data: predicted data
         :return: status_deviation result which has been normalized
         """
-        # ground_true_data = status_data[:-predicted_data.shape[0], :-modelConfig.PARAM_LEN]
-        # status_deviation = np.abs(ground_true_data - predicted_data)
-        #
-        # # normalization
-        # trans = cls.load_trans()
-        # # tmp param values
-        # tmp_param = status_data[0, 0][-modelConfig.PARAM_LEN:]
-        # # merge
-        # status_deviation = np.c_[status_deviation, np.tile(tmp_param, (status_deviation.shape[0], 1))]
-        # # trans
-        # status_deviation = trans.transform(status_deviation)
-        # # drop param value
-        # status_deviation = status_deviation[:, :-modelConfig.PARAM_LEN]
-        status_deviation = np.abs(predicted_data - status_data)
-        return status_deviation
+        predicted_data = sliding_window_view(predicted_data, 6, axis=0).astype(dtype=np.double)
+        status_data = sliding_window_view(status_data, 6, axis=0).astype(dtype=np.double)
+
+        # Dynamic Time Warping (DTW) distance
+        loss = []
+        for predicted_item, status_item in zip(predicted_data, status_data):
+            loss.append(dtw_ndim.distance_fast(predicted_item, status_item))
+        loss = np.array(loss)
+        return loss
 
     @classmethod
     def loss_discriminate(cls, patch_deviation: np.ndarray, loss_patch_size=5) -> np.ndarray:
@@ -547,7 +546,7 @@ class CyTCN(Modeling):
 
         # split into input and outputs
         X, Y = values[:, :-modelConfig.DATA_LEN], \
-               values[:, modelConfig.INPUT_LEN * modelConfig.DATA_LEN :
+               values[:, modelConfig.INPUT_LEN * modelConfig.DATA_LEN:
                          modelConfig.INPUT_LEN * modelConfig.DATA_LEN + modelConfig.OUTPUT_DATA_LEN]
 
         # reshape input to be 3D [samples, timesteps, features]

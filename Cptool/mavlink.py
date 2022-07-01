@@ -17,8 +17,9 @@ from pyulog import ULog
 from tqdm import tqdm
 
 from Cptool.config import toolConfig
-from ModelFit.approximate import Modeling, CyLSTM
-
+from Cptool.mavtool import load_param
+from ModelFit.approximate import CyLSTM
+from optimize.optimizer import AdamGradient
 
 class DroneMavlink(multiprocessing.Process):
     def __init__(self, port, recv_msg_queue=None, send_msg_queue=None):
@@ -221,7 +222,7 @@ class DroneMavlink(multiprocessing.Process):
     # Static method
     @staticmethod
     def create_random_params(param_choice):
-        para_dict = DroneMavlink.load_param()
+        para_dict = load_param()
 
         param_choice_dict = FixMavlink.select_sub_dict(para_dict, param_choice)
 
@@ -249,19 +250,6 @@ class DroneMavlink(multiprocessing.Process):
             last_num = f"{int(num) - 1}"
             with open(log_index, 'w') as f:
                 f.write(last_num)
-
-    @staticmethod
-    def load_param() -> json:
-        """
-        load parameter we want to fuzzing
-        :return:
-        """
-        if toolConfig.MODE == 'Ardupilot':
-            path = 'Cptool/param_ardu.json'
-        elif toolConfig.MODE == 'PX4':
-            path = 'Cptool/param_px4.json'
-        with open(path, 'r') as f:
-            return pd.DataFrame(json.loads(f.read()))
 
     @staticmethod
     def random_mission(loader):
@@ -386,7 +374,7 @@ class FixMavlink(DroneMavlink):
 
         # Sort
         order_name = toolConfig.STATUS_ORDER
-        param_seq = FixMavlink.load_param().columns.to_list()
+        param_seq = load_param().columns.to_list()
         param_name = df_array.keys().difference(order_name).to_list()
         param_name.sort(key=lambda item: param_seq.index(item))
         # Status value + Parameter name
@@ -406,7 +394,7 @@ class FixMavlink(DroneMavlink):
         logs = mavutil.mavlink_connection(log_file)
         # init
         out_data = []
-        accpet_param = FixMavlink.load_param().columns.to_list()
+        accpet_param = load_param().columns.to_list()
 
         while True:
             msg = logs.recv_match(type=accept_item)
@@ -550,22 +538,6 @@ class FixMavlink(DroneMavlink):
             out[name] = random_sample
         return out
 
-    @staticmethod
-    def get_default_values(para_dict):
-        return para_dict.loc[['default']]
-
-    @staticmethod
-    def select_sub_dict(para_dict, param_choice):
-        return para_dict[param_choice]
-
-    @staticmethod
-    def read_range_from_dict(para_dict):
-        return np.array(para_dict.loc['range'].to_list())
-
-    @staticmethod
-    def read_unit_from_dict(para_dict):
-        return para_dict.loc['step'].to_numpy()
-
     def wait_complete(self, timeout=60 * 5):
         if not self._master:
             raise ValueError('Connect at first!')
@@ -619,7 +591,7 @@ class FlyFixMavlink(DroneMavlink):
         log_index = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/LASTLOG.TXT"
         # Read last index
         with open(log_index, 'r') as f:
-            num = int(f.readline()) + 1
+            num = int(f.readline())
             # To string
         num = f'{num}'
         self.log_file = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/{num.rjust(8, '0')}.BIN"
@@ -627,7 +599,7 @@ class FlyFixMavlink(DroneMavlink):
 
     def init_current_param(self):
         # inti param value
-        accpet_param = FixMavlink.load_param().columns.to_list()
+        accpet_param = load_param().columns.to_list()
         while len(self.param_current) <= len(accpet_param):
             msg = self.flight_log.recv_match(type=["PARM"], blocking=True)
             if msg.Name in accpet_param:
@@ -645,7 +617,7 @@ class FlyFixMavlink(DroneMavlink):
         accept_item = toolConfig.LOG_MAP.copy()
         accept_item_ex_param = accept_item.copy()
         accept_item_ex_param.remove("PARM")
-        accpet_param = FixMavlink.load_param().columns.to_list()
+        accpet_param = load_param().columns.to_list()
 
         while True:
             msg = self.flight_log.recv_match(type=accept_item_ex_param)
@@ -728,7 +700,7 @@ class FlyFixMavlink(DroneMavlink):
         df_array = df_array.dropna()
         # Order
         order_name = toolConfig.STATUS_ORDER
-        param_seq = FixMavlink.load_param().columns.to_list()
+        param_seq = load_param().columns.to_list()
         param_name = df_array.keys().difference(order_name).to_list()
         param_name.sort(key=lambda item: param_seq.index(item))
         # Status value + Parameter name
@@ -738,9 +710,12 @@ class FlyFixMavlink(DroneMavlink):
         return df_array
 
     def repair_configuration(self, status_data):
-        # TODO
-        logging.info("Start repair process")
-        pass
+        logging.info("Start repair with parameter")
+        optimize = AdamGradient()
+        optimize.set_status(status_data)
+        optimize.set_predictor(self.predictor)
+        optimize.set_bounds()
+        optimize.start_optimize()
 
     @staticmethod
     def runtime_extract_apm(msg):
@@ -865,15 +840,15 @@ class FlyFixMavlink(DroneMavlink):
                 feature_x, feature_y = self.predictor.data_split(feature_data)
                 # Predict
                 predicted_feature = self.predictor.predict_feature(feature_x)
-                # deviation
+                # deviation loss
                 patch_array_loss = self.predictor.cal_patch_deviation(predicted_feature, feature_y)
-                # # loss
-                # patch_array_loss = Modeling.loss_discriminate(status_deviation)
 
-                logging.info(f"Time {status_data['TimeS'].iloc[0]} status's patch average loss: {np.average(patch_array_loss)}")
+                logging.info(f"Time {status_data['TimeS'].iloc[0]} status's patch average loss:"
+                             f" {np.average(patch_array_loss)}")
 
-                if np.average(patch_array_loss) > 10.1:
-                    self.repair_configuration()
+                # threshold 2.078
+                if np.average(patch_array_loss) > 0.5:
+                    self.repair_configuration(status_data)
 
             except Exception as e:
                 logging.warning(f"{e}, then continue looping")
@@ -886,9 +861,6 @@ class FlyFixMavlink(DroneMavlink):
                 else:
                     # Update timestamp
                     time_last = msg.TimeUS
-
-
-
 
     def run(self) -> None:
         accept_item = toolConfig.LOG_MAP.copy()
@@ -924,4 +896,3 @@ class FlyFixMavlink(DroneMavlink):
                         data = FixMavlink.log_extract_apm(msg)
                     # Callback to main thread to predict status
                     self.recv_msg_queue.put(data)
-

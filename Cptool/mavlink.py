@@ -5,6 +5,7 @@ import multiprocessing
 import os
 import random
 import time
+from multiprocessing import Queue
 
 import numpy as np
 import pandas as pd
@@ -20,7 +21,7 @@ from ModelFit.approximate import Modeling, CyLSTM
 
 
 class DroneMavlink(multiprocessing.Process):
-    def __init__(self, port, recv_msg_queue, send_msg_queue):
+    def __init__(self, port, recv_msg_queue=None, send_msg_queue=None):
         super(DroneMavlink, self).__init__()
         self.recv_msg_queue = recv_msg_queue
         self.send_msg_queue = send_msg_queue
@@ -314,17 +315,17 @@ class FixMavlink(DroneMavlink):
             if len(toolConfig.LOG_MAP):
                 out = {
                     'TimeS': msg.TimeUS / 1000000,
-                    'Roll': math.radians(msg.Roll),
-                    'Pitch': math.radians(msg.Pitch),
-                    'Yaw': math.radians(msg.Yaw),
+                    'Roll': msg.Roll,
+                    'Pitch': msg.Pitch,
+                    'Yaw': msg.Yaw,
                 }
         elif msg.get_type() == 'RATE':
             out = {
                 'TimeS': msg.TimeUS / 1000000,
                 # deg to rad
-                'RateRoll': math.radians(msg.R),
-                'RatePitch': math.radians(msg.P),
-                'RateYaw': math.radians(msg.Y),
+                'RateRoll': msg.R,
+                'RatePitch': msg.P,
+                'RateYaw': msg.Y,
             }
         # elif msg.get_type() == 'POS':
         #     out = {
@@ -367,6 +368,33 @@ class FixMavlink(DroneMavlink):
         return out
 
     @staticmethod
+    def fill_and_process_pd_log(pd_array: pd.DataFrame):
+        # Remain timestamp .1 and drop duplicate
+        pd_array['TimeS'] = pd_array['TimeS'].round(1)
+        pd_array = pd_array.drop_duplicates(keep='first')
+
+        # merge data in same TimeS
+        df_array = pd.DataFrame(columns=pd_array.columns)
+        for group, group_item in pd_array.groupby('TimeS'):
+            # fillna
+            group_item = group_item.fillna(method='ffill')
+            group_item = group_item.fillna(method='bfill')
+            df_array.loc[len(df_array.index)] = group_item.mean()
+        # Drop nan
+        df_array = df_array.fillna(method='ffill')
+        df_array = df_array.dropna()
+
+        # Sort
+        order_name = toolConfig.STATUS_ORDER
+        param_seq = FixMavlink.load_param().columns.to_list()
+        param_name = df_array.keys().difference(order_name).to_list()
+        param_name.sort(key=lambda item: param_seq.index(item))
+        # Status value + Parameter name
+        order_name.extend(param_name)
+        df_array = df_array[order_name]
+        return df_array
+
+    @staticmethod
     def extract_log_file(log_file):
         """
         extract log message form a bin file.
@@ -393,32 +421,9 @@ class FixMavlink(DroneMavlink):
             elif msg.get_type() == 'PARM' and msg.Name in accpet_param:
                 out_data.append(FixMavlink.log_extract_apm(msg))
         pd_array = pd.DataFrame(out_data)
-
-        # Remain timestamp .1 and drop duplicate
-        pd_array['TimeS'] = pd_array['TimeS'].round(1)
-        pd_array = pd_array.drop_duplicates(keep='first')
-
-        # merge data in same TimeS
-        df_array = pd.DataFrame(columns=pd_array.columns)
-        for group, group_item in pd_array.groupby('TimeS'):
-            # fillna
-            group_item = group_item.fillna(method='ffill')
-            group_item = group_item.fillna(method='bfill')
-            df_array.loc[len(df_array.index)] = group_item.mean()
-        # Drop nan
-        df_array = df_array.fillna(method='ffill')
-        df_array = df_array.dropna()
-
-        # Sort
-        order_name = toolConfig.STATUS_ORDER
-        param_seq = FixMavlink.load_param().columns.to_list()
-        param_name = df_array.keys().difference(order_name).to_list()
-        param_name.sort(key=lambda item: param_seq.index(item))
-        # Status value + Parameter name
-        order_name.extend(param_name)
-        df_array = df_array[order_name]
-        # Switch sequence and return
-        return df_array
+        # Switch sequence, fill,  and return
+        pd_array = FixMavlink.fill_and_process_pd_log(pd_array)
+        return pd_array
 
     @staticmethod
     def extract_log_path(log_path, skip=True, threat=None):
@@ -602,16 +607,90 @@ class FixMavlink(DroneMavlink):
 
 
 class FlyFixMavlink(DroneMavlink):
-    def __init__(self, port, recv_msg_queue, send_msg_queue):
+    def __init__(self, port, recv_msg_queue=None, send_msg_queue=None):
         super(FlyFixMavlink, self).__init__(port, recv_msg_queue, send_msg_queue)
         self.predictor: CyLSTM = None
+        self.log_file = None
+        self.flight_log = None
+        self.read_finish = False
+        self.param_current = dict()
+
+    def init_bin_log_file(self):
+        log_index = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/LASTLOG.TXT"
+        # Read last index
+        with open(log_index, 'r') as f:
+            num = int(f.readline()) + 1
+            # To string
+        num = f'{num}'
+        self.log_file = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/{num.rjust(8, '0')}.BIN"
+        logging.info(f"Current log file: {self.log_file}")
+
+    def init_current_param(self):
+        # inti param value
+        accpet_param = FixMavlink.load_param().columns.to_list()
+        while len(self.param_current) <= len(accpet_param):
+            msg = self.flight_log.recv_match(type=["PARM"], blocking=True)
+            if msg.Name in accpet_param:
+                self.param_current.update(FixMavlink.log_extract_apm(msg))
+        self.param_current.pop('TimeS')
+        # logging.debug(f"Current parameters: {self.param_current}")
+
 
     def init_predictor(self, epochs, batch_size):
         self.predictor = CyLSTM(epochs, batch_size, toolConfig.DEBUG)
         self.predictor.read_model()
 
-    def read_status_patch_bin(self, time_unit: float, status):
-        pass
+    def read_status_patch_bin(self, time_last, time_unit: float):
+        time_unit = float(time_unit)
+        out_data = []
+        accept_item = toolConfig.LOG_MAP.copy()
+        accept_item_ex_param = accept_item.copy()
+        accept_item_ex_param.remove("PARM")
+        accpet_param = FixMavlink.load_param().columns.to_list()
+
+        while True:
+            msg = self.flight_log.recv_match(type=accept_item_ex_param)
+            if msg is None:
+                return None
+            elif msg.TimeUS > time_last:
+                break
+
+        # Get first message
+        first_msg = self.flight_log.recv_match(type=accept_item_ex_param)
+        if first_msg is None:
+            print("return False")
+            return False
+        first_time = self.get_time_index_bin(first_msg)
+        first_msg = FixMavlink.log_extract_apm(first_msg)
+        logging.debug(f"Current status at {first_time} second.")
+
+        first_msg.update(self.param_current)
+        out_data.append(first_msg)
+        new_time = first_time
+
+        # Collect data in one time_unit
+        while new_time < first_time + time_unit + 0.1:
+            msg = self.flight_log.recv_match(type=accept_item)
+            if msg is None:
+                break
+            if msg.get_type() in ['ATT', 'RATE']:
+                out_data.append(FixMavlink.log_extract_apm(msg))
+            elif msg.get_type() in ['IMU', 'MAG'] and msg.I == 0:
+                out_data.append(FixMavlink.log_extract_apm(msg))
+            elif msg.get_type() == 'VIBE' and msg.IMU == 0:
+                out_data.append(FixMavlink.log_extract_apm(msg))
+            elif msg.get_type() == 'PARM' and msg.Name in accpet_param:
+                tmp = FixMavlink.log_extract_apm(msg)
+                tmp.pop("TimeS")
+                self.param_current.update(tmp)
+                logging.info(f"Parameters changed: {tmp}")
+                continue
+            new_time = self.get_time_index_bin(msg)
+        # To DataFrame
+        pd_array = pd.DataFrame(out_data)
+        # Switch sequence, fill,  and return
+        pd_array = FixMavlink.fill_and_process_pd_log(pd_array)
+        return pd_array
 
     def read_status_patch(self, time_unit: float, status):
         time_unit = float(time_unit)
@@ -658,25 +737,6 @@ class FlyFixMavlink(DroneMavlink):
         df_array = df_array[order_name]
 
         return df_array
-
-    def detect_instability(self, status_data) -> bool:
-        """
-        detect whether this status becomes instability
-        :param status_data: status patch containing parameters
-        :return: True : stability False: instability
-        """
-
-        # create predicted status of this status patch
-        predict_feature, predict_groundtruth = self.predictor.predict_status(status_data)
-        # calculate deviation between real and predicted
-        patch_deviation = np.abs(predict_feature - predict_groundtruth)
-        # discriminated if pass
-        loss = Modeling.loss_discriminate(patch_deviation)
-        logging.debug(f"Patch loss: {loss}")
-        return False
-        # if loss > 1.88:
-        #     return False
-        # return True
 
     def repair_configuration(self, status_data):
         # TODO
@@ -735,73 +795,130 @@ class FlyFixMavlink(DroneMavlink):
             }
         return out
 
+    def get_param_from_log(self, param):
+        self.flight_log.param_fetch_one(param)
+        while True:
+            message = self.flight_log.recv_match(type=['PARAM_VALUE', 'PARM'], blocking=True).to_dict()
+            if message['param_id'] == param:
+                logging.debug('name: %s\t value: %f' % (message['param_id'], message['param_value']))
+                break
+        return message['param_value']
+
+    def get_params_from_log(self, params):
+        out_dict = {}
+        for param in params:
+            out_dict[param] = DroneMavlink.get_param_from_log(param)
+        return out_dict
+
     @staticmethod
     def get_time_index(msg):
         """
         As different message have different time unit. It needs to convert to same second unit.
         :return:
         """
-        if msg.name in ["ATTITUDE"]: # "GLOBAL_POSITION_INT"
+        if msg.name in ["ATTITUDE"]:  # "GLOBAL_POSITION_INT"
             return msg.time_boot_ms / 1000
         if msg.name in ["RAW_IMU", "VIBRATION"]:
             return msg.time_usec / 1000000
 
-    def online_bin_monitor(self, pitch_size_s=3):
+    @staticmethod
+    def get_time_index_bin(msg):
+        """
+        As different message have different time unit. It needs to convert to same second unit.
+        :return:
+        """
+        return msg.TimeUS / 1000000
+
+    def wait_bin_ready(self):
         while True:
-            # Sample a patch
-            status_data = self.read_status_patch(pitch_size_s, toolConfig.OL_LOG_MAP)
-            # Detect
-            result = self.detect_instability(status_data)
+            time.sleep(0.1)
+            if os.path.exists(self.log_file):
+                break
 
-            if result is False:
-                logging.info("Detect instability caused by current configuration.")
-                self.repair_configuration(status_data)
-
-    def online_monitor(self, pitch_size_s=3):
+    def online_bin_monitor(self, pitch_size_s=2):
+        time_last = 0
+        accept_item = toolConfig.LOG_MAP.copy()
+        # Wait for bin file created
+        self.wait_bin_ready()
+        file = open(self.log_file, 'rb')
         while True:
-            # Sample a patch
-            status_data = self.read_status_patch(pitch_size_s, toolConfig.OL_LOG_MAP)
-            # Detect
-            result = self.detect_instability(status_data)
-
-            if result is False:
-                logging.info("Detect instability caused by current configuration.")
-                self.repair_configuration(status_data)
-
-    def wait_complete(self):
-        if not self._master:
-            raise ValueError('Connect at first!')
-        while True:
+            time.sleep(1)
+            # Flush write buffer
+            file.flush()
+            # Load current log file
+            self.flight_log = mavutil.mavlink_connection(self.log_file)
+            # inti param value
+            self.init_current_param()
             try:
-                message = self._master.recv_match(type=['STATUSTEXT'],
-                                                  blocking=True, timeout=30)
-                if message is not None:
-                    message = message.to_dict()
-                    out_msg = "None"
-                    line = message['text']
-                    if message["severity"] == 6:
-                        if "Land" in line:
-                            # if successful landed, break the loop and return true
-                            logging.info(f"Successful.")
-                            return True
-                    # elif message["severity"] == 2 or message["severity"] == 0:
-                    #     # Appear error, break loop and return false
-                    #     if "SIM Hit ground at" in line:
-                    #         pass
-                    #     elif "Potential Thrust Loss" in line:
-                    #         pass
-                    #     elif "PreArm" in line:
-                    #         pass
-                    #         # will not generate log file
-                    #         logging.info(f"Get error with {message['text']}")
-                    #         return True
-                    #     logging.info(f"Get error with {message['text']}")
-                    #     return False
-            except TimeoutError:
-                # Mission point time out, change other params
-                logging.warning('wp timeout!')
-                return False
-            except KeyboardInterrupt:
-                logging.info('Key bordInterrupt! exit')
-                return False
-        return True
+                # Read flight status
+                status_data = self.read_status_patch_bin(time_last, pitch_size_s)
+                # Check landed or read failure
+                if status_data is None:
+                    time.sleep(0.1)
+                    logging.info(f"Successful break the loop.")
+                    return True
+                elif status_data is False:
+                    logging.debug(f"Reading status failure, try again.")
+                    continue
+                # status data to feature data
+                feature_data = self.predictor.status2feature(status_data)
+                # create predicted status of this status patch
+                feature_x, feature_y = self.predictor.data_split(feature_data)
+                # Predict
+                predicted_feature = self.predictor.predict_feature(feature_x)
+                # deviation
+                status_deviation = np.abs(feature_y - predicted_feature)
+                # loss
+                patch_array_loss = CyLSTM.loss_discriminate(status_deviation)
+
+                logging.info(f"Patch average loss: {np.average(patch_array_loss)}")
+            except Exception as e:
+                logging.warning(f"Warning {e}, then continue looping")
+
+            # Drop old message
+            while True:
+                msg = self.flight_log.recv_match(type=accept_item)
+                if msg is None:
+                    break
+                else:
+                    # Update timestamp
+                    time_last = msg.TimeUS
+
+
+
+
+    def run(self) -> None:
+        accept_item = toolConfig.LOG_MAP.copy()
+        accept_item.remove("PARM")
+        # Collect data in one time_unit
+        time_last = 0
+
+        while True:
+            # Lode the BIN file
+            time.sleep(0.1)
+            logging.info(f"Time_last : {time_last}")
+            flight_log = mavutil.mavlink_connection(self.log_file, zero_time_base=time_last)
+            # Loop to read status
+            while True:
+                if not self.send_msg_queue.empty():
+                    notify = self.send_msg_queue.get()
+                    logging.info(f"Notify get : {notify}")
+                    if notify == "break":
+                        print(f"self.read_finish : {self.read_finish}")
+                        while not self.recv_msg_queue.empty():
+                            time_last = self.recv_msg_queue.get()["TimeS"]
+                        break
+
+                msg = flight_log.recv_match(type=accept_item, blocking=True)
+                if msg is None:
+                    continue
+                else:
+                    if msg.get_type() in ['ATT', 'RATE']:
+                        data = FixMavlink.log_extract_apm(msg)
+                    elif msg.get_type() in ['IMU', 'MAG'] and msg.I == 0:
+                        data = FixMavlink.log_extract_apm(msg)
+                    elif msg.get_type() == 'VIBE' and msg.IMU == 0:
+                        data = FixMavlink.log_extract_apm(msg)
+                    # Callback to main thread to predict status
+                    self.recv_msg_queue.put(data)
+

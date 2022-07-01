@@ -153,25 +153,12 @@ class Modeling(object):
 
         return predict_X
 
-    def predict_status(self, status_data: pd.DataFrame):
-        """
-        convert the status and predict
-        :param status_data:
-        :return:
-        """
-        if self._model is None:
-            logging.warning('Model is not trained!')
-            raise ValueError('Train or load model at first')
-
+    def status2feature(self, status_data: pd.DataFrame):
         data = status_data.drop(["TimeS"], axis=1)
         # extract patch
         values = data.values
         values = self._cs_to_sl(values)
-        X, predict_groundtruth = self.data_split(values)
-
-        predict_feature = self.predict_feature(X)
-
-        return predict_feature, predict_groundtruth
+        return values
 
     def predict_feature(self, feature_data):
         """

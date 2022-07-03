@@ -7,6 +7,8 @@ Train LSTM Model
 if __name__ == '__main__':
     lstm = CyLSTM(100, 512)
     # read
-    feature = pd.read_csv("model/features_train.csv")
+    feature = pd.read_csv("model/features_test.csv")
     # Train
-    lstm.train(feature, cuda=True)
+    lstm.read_model()
+
+    lstm.test(feature, cuda=True)

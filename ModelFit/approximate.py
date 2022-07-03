@@ -8,14 +8,14 @@ from abc import abstractmethod
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from dtaidistance import dtw, dtw_ndim
+from dtaidistance import dtw_ndim
 from keras.layers import Dense, Dropout, RepeatVector
 from keras.layers import LSTM
 from keras.models import Sequential
 from numpy.lib.stride_tricks import sliding_window_view
-from scipy.spatial.distance import euclidean
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
+from tcn import TCN
 from tensorflow.python.keras.models import load_model
 from tqdm import tqdm
 
@@ -100,6 +100,28 @@ class Modeling(object):
         logging.info(f"Shape: {X.shape}, {Y.shape}")
         return X, Y
 
+    def extract_feature(self, dir):
+        file_list = []
+        for filename in os.listdir(dir):
+            if filename.endswith(".csv"):
+                file_list.append(filename)
+        file_list.sort()
+
+        pd_array = None
+        for index, filename in enumerate(file_list):
+            # Read file
+            data = pd.read_csv(f"{dir}/{filename}")
+            data = data.drop(["TimeS"], axis=1)
+            # extract patch
+            values = data.values
+            values = self._cs_to_sl(values)
+            # if first
+            if index == 0:
+                pd_array = values
+            else:
+                pd_array = pd.concat([pd_array, values])
+        return pd_array
+
     @abstractmethod
     def data_split(self, value):
         pass
@@ -115,20 +137,6 @@ class Modeling(object):
     def set_model(self, path):
         local = os.getcwd()
         self._model = load_model(f"{local}/{path}")
-
-    def run(self, train_filename, cuda: bool = False):
-        if not cuda:
-            os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-
-        # load dataset
-        dataset = pd.read_csv(train_filename, header=0, index_col=0)
-
-        values = dataset.values
-
-        values = self._cs_to_sl(values)
-        train_X, train_y, valid_X, valid_y = self._train_valid_split(values)
-        model = self._fit_network(train_X, train_y, valid_X, valid_y)
-        self._model = model
 
     def train(self, values, cuda: bool = False):
         train_X, train_y, valid_X, valid_y = self._train_valid_split(values)
@@ -312,9 +320,7 @@ class Modeling(object):
         if not cuda:
             os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
         # load dataset
-        values = test_data.values
-        values = self._cs_to_sl(values)
-        test_X, test_Y = self._test_split(values)
+        test_X, test_Y = self.data_split(test_data)
 
         start = time.time()
         self._model.predict(test_X)
@@ -493,28 +499,6 @@ class CyLSTM(Modeling):
     def read_model(self):
         self._model = load_model(f'model/{toolConfig.MODE}/{self.in_out}/lstm.h5')
 
-    def extract_feature(self, dir):
-        file_list = []
-        for filename in os.listdir(dir):
-            if filename.endswith(".csv"):
-                file_list.append(filename)
-        file_list.sort()
-
-        pd_array = None
-        for index, filename in enumerate(file_list):
-            # Read file
-            data = pd.read_csv(f"{dir}/{filename}")
-            data = data.drop(["TimeS"], axis=1)
-            # extract patch
-            values = data.values
-            values = self._cs_to_sl(values)
-            # if first
-            if index == 0:
-                pd_array = values
-            else:
-                pd_array = pd.concat([pd_array, values])
-        return pd_array
-
     @classmethod
     def merge_file_data(cls, dir):
         file_list = []
@@ -545,9 +529,13 @@ class CyTCN(Modeling):
         values = value.values
 
         # split into input and outputs
-        X, Y = values[:, :-modelConfig.DATA_LEN], \
-               values[:, modelConfig.INPUT_LEN * modelConfig.DATA_LEN:
-                         modelConfig.INPUT_LEN * modelConfig.DATA_LEN + modelConfig.OUTPUT_DATA_LEN]
+        X = values[:, :modelConfig.INPUT_DATA_LEN]
+        # cut off parameter value in y
+        y = values[:, modelConfig.INPUT_DATA_LEN:]
+        # To 3D
+        y = y.reshape((y.shape[0], modelConfig.OUTPUT_LEN, -1))
+        # Reduce parameter length and reshape to 2D
+        Y = y[:, :, :-modelConfig.PARAM_LEN].reshape((y.shape[0], modelConfig.OUTPUT_DATA_LEN))
 
         # reshape input to be 3D [samples, timesteps, features]
         X = X.reshape((X.shape[0], modelConfig.INPUT_LEN, modelConfig.DATA_LEN))
@@ -565,7 +553,7 @@ class CyTCN(Modeling):
                             epochs=self.epochs, batch_size=self.batch_size,
                             validation_data=(valid_X, valid_Y),
                             verbose=2,
-                            shuffle=False)
+                            shuffle=True)
 
         if num is not None:
             model.save(f'model/{self._uav_class}/{self.in_out}/tcn{num}.h5')

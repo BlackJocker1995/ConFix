@@ -1,12 +1,12 @@
 from Cptool.config import toolConfig
-from ModelFit.approximate import CyLSTM
+from ModelFit.approximate import CyLSTM, CyTCN
 import pandas as pd
 """
 Train LSTM Model
 """
 if __name__ == '__main__':
-    lstm = CyLSTM(100, 512)
+    tcn = CyTCN(100, 512)
     # read
     feature = pd.read_csv("model/features_train.csv")
     # Train
-    lstm.train(feature, cuda=True)
+    tcn.train(feature, cuda=True)

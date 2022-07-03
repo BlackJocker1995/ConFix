@@ -1,7 +1,8 @@
 import json
 
+import os
 import pandas as pd
-
+import numpy as np
 from Cptool.config import toolConfig
 
 
@@ -32,3 +33,26 @@ def read_range_from_dict(para_dict):
 
 def read_unit_from_dict(para_dict):
     return para_dict.loc['step'].to_numpy()
+
+
+# Log analysis function
+def read_path_specified_file(log_path, exe):
+    """
+        :param log_path:
+        :param exe:
+        :return:
+        """
+    file_list = []
+    for filename in os.listdir(log_path):
+        if filename.endswith(f'.{exe}'):
+            file_list.append(filename)
+    file_list.sort()
+    return file_list
+
+
+def rename_bin(log_path, ranges):
+    file_list = read_path_specified_file(log_path, 'BIN')
+    # 列出文件夹内所有.BIN结尾的文件并排序
+    for file, num in zip(file_list, range(ranges[0], ranges[1])):
+        name, _ = file.split('.')
+        os.rename(f"{log_path}/{file}", f"{log_path}/{str(num).zfill(8)}.BIN")

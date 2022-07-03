@@ -17,9 +17,41 @@ from pyulog import ULog
 from tqdm import tqdm
 
 from Cptool.config import toolConfig
-from Cptool.mavtool import load_param
+from Cptool.mavtool import load_param, select_sub_dict, read_path_specified_file
 from ModelFit.approximate import CyLSTM
 from optimize.optimizer import AdamGradient
+
+
+class MavTool:
+    @staticmethod
+    def load_param() -> json:
+        """
+        load parameter we want to fuzzing
+        :return:
+        """
+        if toolConfig.MODE == 'Ardupilot':
+            path = 'Cptool/param_ardu.json'
+        elif toolConfig.MODE == 'PX4':
+            path = 'Cptool/param_px4.json'
+        with open(path, 'r') as f:
+            return pd.DataFrame(json.loads(f.read()))
+
+    @staticmethod
+    def get_default_values(para_dict):
+        return para_dict.loc[['default']]
+
+    @staticmethod
+    def select_sub_dict(para_dict, param_choice):
+        return para_dict[param_choice]
+
+    @staticmethod
+    def read_range_from_dict(para_dict):
+        return np.array(para_dict.loc['range'].to_list())
+
+    @staticmethod
+    def read_unit_from_dict(para_dict):
+        return para_dict.loc['step'].to_numpy()
+
 
 class DroneMavlink(multiprocessing.Process):
     def __init__(self, port, recv_msg_queue=None, send_msg_queue=None):
@@ -224,7 +256,7 @@ class DroneMavlink(multiprocessing.Process):
     def create_random_params(param_choice):
         para_dict = load_param()
 
-        param_choice_dict = FixMavlink.select_sub_dict(para_dict, param_choice)
+        param_choice_dict = select_sub_dict(para_dict, param_choice)
 
         out_dict = {}
         for key, param_range in param_choice_dict.items():
@@ -275,20 +307,6 @@ class FixMavlink(DroneMavlink):
     def __init__(self, port, recv_msg_queue, send_msg_queue):
         super(FixMavlink, self).__init__(port, recv_msg_queue, send_msg_queue)
 
-    # Log analysis function
-    @staticmethod
-    def read_path_specified_file(log_path, exe):
-        """
-        :param log_path:
-        :param exe:
-        :return:
-        """
-        file_list = []
-        for filename in os.listdir(log_path):
-            if filename.endswith(f'.{exe}'):
-                file_list.append(filename)
-        file_list.sort()
-        return file_list
 
     # Ardupilot
     @staticmethod
@@ -423,7 +441,7 @@ class FixMavlink(DroneMavlink):
         :return:
         """
 
-        file_list = FixMavlink.read_path_specified_file(log_path, 'BIN')
+        file_list = read_path_specified_file(log_path, 'BIN')
         if not os.path.exists(f"{log_path}/csv"):
             os.makedirs(f"{log_path}/csv")
 

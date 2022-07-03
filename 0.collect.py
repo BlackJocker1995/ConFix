@@ -39,7 +39,7 @@ if __name__ == '__main__':
 
         manager.mav_monitor_init(FixMavlink)
 
-        manager.mav_monitor.set_mission('Cptool/fitCollection.txt', False)
+        manager.mav_monitor.set_mission('Cptool/mission.txt', False)
 
         manager.mav_monitor.set_random_param_and_start()
         # manager.mav_monitor.start_mission()

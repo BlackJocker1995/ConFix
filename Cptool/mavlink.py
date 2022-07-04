@@ -556,7 +556,7 @@ class FixMavlink(DroneMavlink):
             out[name] = random_sample
         return out
 
-    def wait_complete(self, timeout=60 * 5):
+    def wait_complete(self, remain_fail=False, timeout=60 * 5):
         if not self._master:
             raise ValueError('Connect at first!')
         try:
@@ -579,13 +579,19 @@ class FixMavlink(DroneMavlink):
                         pass
                     elif "Potential Thrust Loss" in line:
                         pass
+                    elif "Crash" in line:
+                        pass
                     elif "PreArm" in line:
                         pass
                         # will not generate log file
                         logging.info(f"Get error with {message['text']}")
                         return True
                     logging.info(f"Get error with {message['text']}")
-                    return False
+                    if remain_fail:
+                        # Keep problem log
+                        return True
+                    else:
+                        return False
         except TimeoutError:
             # Mission point time out, change other params
             logging.warning('Wp timeout!')
@@ -868,8 +874,8 @@ class FlyFixMavlink(DroneMavlink):
                 logging.info(f"Time {status_data['TimeS'].iloc[0].round(1)} status' patch average loss:"
                              f" {np.average(patch_array_loss)}")
 
-                # threshold 1.4
-                if np.average(patch_array_loss) > 1.4:
+                # threshold 3
+                if np.average(patch_array_loss) > 0.12:
                     self.repair_configuration(status_data)
 
             except Exception as e:

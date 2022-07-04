@@ -26,7 +26,7 @@ from ModelFit.config import modelConfig
 class Modeling(object):
     def __init__(self, resize: bool = True, debug: bool = False):
         self._model: Sequential = None
-        self._trans: MinMaxScaler = None
+        self.trans: MinMaxScaler = None
         self._uav_class = toolConfig.MODE
         self._resize = resize
         self.in_out = f"{modelConfig.INPUT_LEN}_{modelConfig.OUTPUT_LEN}"
@@ -43,10 +43,10 @@ class Modeling(object):
         values = values.astype('float32')
 
         # normalize features
-
         if modelConfig.RETRANS:
-            trans = self.load_trans()
-            values = trans.transform(values)
+            if self.trans is None:
+                self.trans = self.load_trans()
+            values = self.trans.transform(values)
 
         # frame as supervised learning
         reframed = self._series_to_supervised(values, modelConfig.INPUT_LEN, modelConfig.OUTPUT_LEN, True)
@@ -99,6 +99,9 @@ class Modeling(object):
         X, Y = self.data_split(values)
         logging.info(f"Shape: {X.shape}, {Y.shape}")
         return X, Y
+
+    def read_trans(self):
+        self.trans = self.load_trans()
 
     def extract_feature(self, dir):
         file_list = []
@@ -415,10 +418,11 @@ class Modeling(object):
         status_data = sliding_window_view(status_data, 6, axis=0).astype(dtype=np.double)
 
         # Dynamic Time Warping (DTW) distance
-        loss = []
-        for predicted_item, status_item in zip(predicted_data, status_data):
-            loss.append(dtw_ndim.distance_fast(predicted_item, status_item))
-        loss = np.array(loss)
+        # loss = []
+        # for predicted_item, status_item in zip(predicted_data, status_data):
+        #     loss.append(dtw_ndim.distance_fast(predicted_item, status_item))
+        # loss = np.array(loss)
+        loss = np.average(np.abs(status_data-predicted_data).sum(axis=1), axis=1)
         return loss
 
     @classmethod

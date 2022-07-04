@@ -28,7 +28,7 @@ if __name__ == '__main__':
 
     # patch_array_loss = CyLSTM.loss_discriminate(status_deviation)
 
-    # patch_array_loss = reject_outliers(patch_array_loss, 3)
+    patch_array_loss = reject_outliers(patch_array_loss, 3)
 
     _ = plt.hist(patch_array_loss, bins='auto')
 

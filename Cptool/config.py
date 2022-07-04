@@ -22,11 +22,11 @@ toolConfig.MODE = 'Ardupilot'  # "PX4" #
 # PX4 : ['Jmavsim']
 toolConfig.SIM = "SITL"  # "Jmavsim"
 # Simulation Speed
-toolConfig.SPEED = 3
+toolConfig.SPEED = 1
 # Flight home (None, AVC_plane)
 toolConfig.HOME = None  # "AVC_plane"
 # Output Debug Message
-toolConfig.DEBUG = True
+toolConfig.DEBUG = False
 # Wind Speed range
 toolConfig.WIND_RANGE = [8, 10.7]
 # GUI Windows size

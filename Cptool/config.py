@@ -1,6 +1,3 @@
-import time
-
-
 class ToolConfig:
     class ConstError(PermissionError):
         pass
@@ -19,17 +16,17 @@ class ToolConfig:
 toolConfig = ToolConfig()
 # SITL Type PX4 and Ardupilot
 # {'PX4','Ardupilot'}
-toolConfig.MODE = 'Ardupilot' #"PX4" #
+toolConfig.MODE = 'Ardupilot'  # "PX4" #
 # Simulation Type
 # Ardupilot : ['Airsim', 'Morse', 'Gazebo', 'SITL']
 # PX4 : ['Jmavsim']
-toolConfig.SIM = "SITL" # "Jmavsim"
+toolConfig.SIM = "SITL"  # "Jmavsim"
 # Simulation Speed
 toolConfig.SPEED = 3
 # Flight home (None, AVC_plane)
-toolConfig.HOME = None # "AVC_plane"
+toolConfig.HOME = None  # "AVC_plane"
 # Output Debug Message
-toolConfig.DEBUG = False
+toolConfig.DEBUG = True
 # Wind Speed range
 toolConfig.WIND_RANGE = [8, 10.7]
 # GUI Windows size
@@ -44,14 +41,14 @@ toolConfig.ARDUPILOT_LOG_PATH = '/media/rain/data'
 toolConfig.PX4_LOG_PATH = '/home/rain/PX4-Autopilot'
 if toolConfig.MODE == "Ardupilot":
     # Mavlink Part
-    toolConfig.LOG_MAP = ['IMU', 'ATT', 'RATE', 'PARM', 'VIBE', "MAG"] # "POS"
+    toolConfig.LOG_MAP = ['IMU', 'ATT', 'RATE', 'PARM', 'VIBE', "MAG"]  # "POS"
     # Online Mavlink Part
-    toolConfig.OL_LOG_MAP = ['ATTITUDE', 'RAW_IMU', 'VIBRATION'] # 'GLOBAL_POSITION_INT'
+    toolConfig.OL_LOG_MAP = ['ATTITUDE', 'RAW_IMU', 'VIBRATION']  # 'GLOBAL_POSITION_INT'
     # Status Order
     toolConfig.STATUS_ORDER = ['TimeS', 'Roll', 'Pitch', 'Yaw', 'RateRoll', 'RatePitch', 'RateYaw',
-                           #'Lat', 'Lng', 'Alt',
-                           'AccX', 'AccY', 'AccZ', 'GyrX', 'GyrY', 'GyrZ',
-                           'MagX', 'MagY', 'MagZ', 'VibeX', 'VibeY', 'VibeZ']
+                               # 'Lat', 'Lng', 'Alt',
+                               'AccX', 'AccY', 'AccZ', 'GyrX', 'GyrY', 'GyrZ',
+                               'MagX', 'MagY', 'MagZ', 'VibeX', 'VibeY', 'VibeZ']
 elif toolConfig.MODE == "PX4":
     # TODO: px4 data
     # Mavlink Part
@@ -69,14 +66,14 @@ toolConfig.PARAM = [
     "PSC_VELXY_P",
     "PSC_POSZ_P",
     "ATC_ANG_RLL_P",
-    "ATC_ANG_PIT_P",
-    "ATC_ANG_YAW_P",
     "ATC_RAT_RLL_I",
     "ATC_RAT_RLL_D",
     "ATC_RAT_RLL_P",
+    "ATC_ANG_PIT_P",
     "ATC_RAT_PIT_P",
     "ATC_RAT_PIT_I",
     "ATC_RAT_PIT_D",
+    "ATC_ANG_YAW_P",
     "ATC_RAT_YAW_P",
     "ATC_RAT_YAW_I",
     "ATC_RAT_YAW_D",

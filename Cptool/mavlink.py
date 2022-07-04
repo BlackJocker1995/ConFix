@@ -18,7 +18,7 @@ from tqdm import tqdm
 
 from Cptool.config import toolConfig
 from Cptool.mavtool import load_param, select_sub_dict, read_path_specified_file
-from ModelFit.approximate import CyLSTM
+from ModelFit.approximate import CyLSTM, Modeling
 from optimize.optimizer import AdamGradient
 
 
@@ -609,7 +609,7 @@ class FlyFixMavlink(DroneMavlink):
         log_index = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/LASTLOG.TXT"
         # Read last index
         with open(log_index, 'r') as f:
-            num = int(f.readline())
+            num = int(f.readline()) + 1
             # To string
         num = f'{num}'
         self.log_file = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/{num.rjust(8, '0')}.BIN"
@@ -625,8 +625,8 @@ class FlyFixMavlink(DroneMavlink):
         self.param_current.pop('TimeS')
         # logging.debug(f"Current parameters: {self.param_current}")
 
-    def init_predictor(self, epochs, batch_size):
-        self.predictor = CyLSTM(epochs, batch_size, toolConfig.DEBUG)
+    def init_predictor(self, model_class, epochs, batch_size):
+        self.predictor: Modeling = model_class(epochs, batch_size, toolConfig.DEBUG)
         self.predictor.read_model()
 
     def read_status_patch_bin(self, time_last, time_unit: float):
@@ -729,11 +729,15 @@ class FlyFixMavlink(DroneMavlink):
 
     def repair_configuration(self, status_data):
         logging.info("Start repair with parameter")
+        start = time.time()
         optimize = AdamGradient()
         optimize.set_status(status_data)
         optimize.set_predictor(self.predictor)
         optimize.set_bounds()
-        optimize.start_optimize()
+        new_config = optimize.start_optimize()
+        end = time.time()
+        logging.info(f"Repair configuration and cost: {end-start} second")
+        self.set_params(new_config)
 
     @staticmethod
     def runtime_extract_apm(msg):
@@ -861,11 +865,11 @@ class FlyFixMavlink(DroneMavlink):
                 # deviation loss
                 patch_array_loss = self.predictor.cal_patch_deviation(predicted_feature, feature_y)
 
-                logging.info(f"Time {status_data['TimeS'].iloc[0]} status's patch average loss:"
+                logging.info(f"Time {status_data['TimeS'].iloc[0].round(1)} status' patch average loss:"
                              f" {np.average(patch_array_loss)}")
 
-                # threshold 2.078
-                if np.average(patch_array_loss) > 0.5:
+                # threshold 1.4
+                if np.average(patch_array_loss) > 1.4:
                     self.repair_configuration(status_data)
 
             except Exception as e:

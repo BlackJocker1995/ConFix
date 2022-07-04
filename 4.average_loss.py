@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from ModelFit.approximate import Modeling
+from ModelFit.approximate import Modeling, CyTCN
 from Cptool.config import toolConfig
 from ModelFit.approximate import CyLSTM
 import matplotlib.pyplot as plt
@@ -16,7 +16,7 @@ def reject_outliers(data, m=2):
 
 
 if __name__ == '__main__':
-    cylstm = CyLSTM(100, 128)
+    cylstm = CyTCN(100, 128)
     feature = pd.read_csv("model/features_ordinary.csv")
     cylstm.read_model()
 

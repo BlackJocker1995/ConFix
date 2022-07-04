@@ -134,6 +134,10 @@ class Modeling(object):
     def _build_model(self, train_shape: np.shape):
         return None
 
+    @abstractmethod
+    def read_model(self):
+        pass
+
     def set_model(self, path):
         local = os.getcwd()
         self._model = load_model(f"{local}/{path}")
@@ -403,6 +407,10 @@ class Modeling(object):
         :param predicted_data: predicted data
         :return: status_deviation result which has been normalized
         """
+        if len(predicted_data.shape) > 2:
+            predicted_data = predicted_data.reshape([predicted_data.shape[0], predicted_data.shape[2]])
+            status_data = status_data.reshape([status_data.shape[0], status_data.shape[2]])
+
         predicted_data = sliding_window_view(predicted_data, 6, axis=0).astype(dtype=np.double)
         status_data = sliding_window_view(status_data, 6, axis=0).astype(dtype=np.double)
 

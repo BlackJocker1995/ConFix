@@ -1,3 +1,5 @@
+import logging
+
 import numpy as np
 import pandas as pd
 
@@ -39,6 +41,7 @@ class DTWLossProblem(Problem):
 
     def function(self, configuration):
         configuration = self.param_value2step(configuration)
+        logging.debug(f"Optimizer configuration: {configuration}")
         # replace parameter value
         try_statue_data = self.status_data.replace(configuration)
         # status data to feature data

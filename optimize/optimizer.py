@@ -46,6 +46,8 @@ class AdamGradient(DroneOptimizer):
         super().__init__()
 
     def start_optimize(self):
-        res = minimize(self.problem.function, self.start_value, method='nelder-mead',
-                       options={'xatol': 1e-8, 'disp': True})
-        print(res)
+        configuration = minimize(self.problem.function, self.start_value, bounds=self.param_bounds,
+                                 method='nelder-mead',
+                                 options={'xatol': 1e-4, 'disp': False, 'maxiter': 5})
+        configuration = self.problem.param_value2step(configuration.final_simplex[0][0])
+        return configuration

@@ -1,5 +1,3 @@
-import time
-
 from Cptool.config import ToolConfig, toolConfig
 
 modelConfig = ToolConfig()

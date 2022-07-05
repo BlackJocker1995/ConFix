@@ -8,7 +8,6 @@ from abc import abstractmethod
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from dtaidistance import dtw_ndim
 from keras.layers import Dense, Dropout, RepeatVector
 from keras.layers import LSTM
 from keras.models import Sequential
@@ -422,7 +421,7 @@ class Modeling(object):
         # for predicted_item, status_item in zip(predicted_data, status_data):
         #     loss.append(dtw_ndim.distance_fast(predicted_item, status_item))
         # loss = np.array(loss)
-        loss = np.average(np.abs(status_data-predicted_data).sum(axis=1), axis=1)
+        loss = np.average(np.abs(status_data - predicted_data).sum(axis=1), axis=1)
         return loss
 
     @classmethod

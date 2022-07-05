@@ -1,6 +1,7 @@
-from Cptool.config import toolConfig
-from ModelFit.approximate import CyLSTM
 import pandas as pd
+
+from ModelFit.approximate import CyLSTM
+
 """
 Train LSTM Model
 """

@@ -1,9 +1,9 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+
 from ModelFit.approximate import Modeling, CyTCN
-from Cptool.config import toolConfig
-from ModelFit.approximate import CyLSTM
-import matplotlib.pyplot as plt
+
 
 def reject_outliers(data, m=2):
     """

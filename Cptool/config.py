@@ -22,7 +22,7 @@ toolConfig.MODE = 'Ardupilot'  # "PX4" #
 # PX4 : ['Jmavsim']
 toolConfig.SIM = "SITL"  # "Jmavsim"
 # Simulation Speed
-toolConfig.SPEED = 1
+toolConfig.SPEED = 3
 # Flight home (None, AVC_plane)
 toolConfig.HOME = None  # "AVC_plane"
 # Output Debug Message

@@ -1,11 +1,9 @@
 import json
 import logging
-import math
 import multiprocessing
 import os
 import random
 import time
-from multiprocessing import Queue
 
 import numpy as np
 import pandas as pd
@@ -19,7 +17,7 @@ from tqdm import tqdm
 from Cptool.config import toolConfig
 from Cptool.mavtool import load_param, select_sub_dict, read_path_specified_file
 from ModelFit.approximate import CyLSTM, Modeling
-from optimize.optimizer import AdamGradient
+from optimize.optimizer import GAOptimizer, AdamGradient
 
 
 class MavTool:
@@ -307,7 +305,6 @@ class FixMavlink(DroneMavlink):
     def __init__(self, port, recv_msg_queue, send_msg_queue):
         super(FixMavlink, self).__init__(port, recv_msg_queue, send_msg_queue)
 
-
     # Ardupilot
     @staticmethod
     def log_extract_apm(msg: DFMessage):
@@ -391,7 +388,7 @@ class FixMavlink(DroneMavlink):
         df_array = df_array.dropna()
 
         # Sort
-        order_name = toolConfig.STATUS_ORDER
+        order_name = toolConfig.STATUS_ORDER.copy()
         param_seq = load_param().columns.to_list()
         param_name = df_array.keys().difference(order_name).to_list()
         param_name.sort(key=lambda item: param_seq.index(item))
@@ -420,10 +417,16 @@ class FixMavlink(DroneMavlink):
                 break
             if msg.get_type() in ['ATT', 'RATE']:
                 out_data.append(FixMavlink.log_extract_apm(msg))
-            elif msg.get_type() in ['IMU', 'MAG'] and msg.I == 0:
-                out_data.append(FixMavlink.log_extract_apm(msg))
-            elif msg.get_type() == 'VIBE' and msg.IMU == 0:
-                out_data.append(FixMavlink.log_extract_apm(msg))
+            elif msg.get_type() in ['IMU', 'MAG']:
+                if hasattr(msg, "I") and msg.I == 0:
+                    out_data.append(FixMavlink.log_extract_apm(msg))
+                else:
+                    out_data.append(FixMavlink.log_extract_apm(msg))
+            elif msg.get_type() == 'VIBE':
+                if hasattr(msg, "IMU") and msg.IMU == 0:
+                    out_data.append(FixMavlink.log_extract_apm(msg))
+                else:
+                    out_data.append(FixMavlink.log_extract_apm(msg))
             elif msg.get_type() == 'PARM' and msg.Name in accpet_param:
                 out_data.append(FixMavlink.log_extract_apm(msg))
         pd_array = pd.DataFrame(out_data)
@@ -462,12 +465,12 @@ class FixMavlink(DroneMavlink):
                 if skip and os.path.exists(f'{log_path}/csv/{name}.csv'):
                     continue
                 # extract
-                try:
-                    csv_data = FixMavlink.extract_log_file(log_path + f'/{file}')
-                    csv_data.to_csv(f'{log_path}/csv/{name}.csv', index=False)
-                except Exception as e:
-                    logging.warning(f"Error processing {file} : {e}")
-                    continue
+                # try:
+                csv_data = FixMavlink.extract_log_file(log_path + f'/{file}')
+                csv_data.to_csv(f'{log_path}/csv/{name}.csv', index=False)
+                # except Exception as e:
+                #     logging.warning(f"Error processing {file} : {e}")
+                #     continue
 
     @staticmethod
     @ray.remote
@@ -723,7 +726,7 @@ class FlyFixMavlink(DroneMavlink):
         df_array = df_array.fillna(method='ffill')
         df_array = df_array.dropna()
         # Order
-        order_name = toolConfig.STATUS_ORDER
+        order_name = toolConfig.STATUS_ORDER.copy()
         param_seq = load_param().columns.to_list()
         param_name = df_array.keys().difference(order_name).to_list()
         param_name.sort(key=lambda item: param_seq.index(item))
@@ -736,13 +739,13 @@ class FlyFixMavlink(DroneMavlink):
     def repair_configuration(self, status_data):
         logging.info("Start repair with parameter")
         start = time.time()
-        optimize = AdamGradient()
+        optimize = GAOptimizer()
         optimize.set_status(status_data)
         optimize.set_predictor(self.predictor)
         optimize.set_bounds()
         new_config = optimize.start_optimize()
         end = time.time()
-        logging.info(f"Repair configuration and cost: {end-start} second")
+        logging.info(f"Repair configuration {new_config} and cost: {end - start} second")
         self.set_params(new_config)
 
     @staticmethod
@@ -843,6 +846,7 @@ class FlyFixMavlink(DroneMavlink):
         # Wait for bin file created
         self.wait_bin_ready()
         file = open(self.log_file, 'rb')
+        repaired = False
         while True:
             time.sleep(1)
             # Flush write buffer
@@ -874,9 +878,10 @@ class FlyFixMavlink(DroneMavlink):
                 logging.info(f"Time {status_data['TimeS'].iloc[0].round(1)} status' patch average loss:"
                              f" {np.average(patch_array_loss)}")
 
-                # threshold 3
-                if np.average(patch_array_loss) > 0.12:
+                # threshold 0.12
+                if np.average(patch_array_loss) > 0.12 and not repaired:
                     self.repair_configuration(status_data)
+                    repaired = True
 
             except Exception as e:
                 logging.warning(f"{e}, then continue looping")

@@ -76,7 +76,7 @@ class SimManager(object):
             if toolConfig.SIM == 'SITL':
                 if toolConfig.HOME is not None:
                     cmd = f"python3 /home/rain/ardupilot/Tools/autotest/sim_vehicle.py --location={toolConfig.HOME} " \
-                      f"--out=127.0.0.1:14550 --out=127.0.0.1:14540 -v ArduCopter -w -S {toolConfig.SPEED} "
+                          f"--out=127.0.0.1:14550 --out=127.0.0.1:14540 -v ArduCopter -w -S {toolConfig.SPEED} "
                 else:
                     cmd = f"python3 /home/rain/ardupilot/Tools/autotest/sim_vehicle.py " \
                           f"--out=127.0.0.1:14550 --out=127.0.0.1:14540 -v ArduCopter -w -S {toolConfig.SPEED} "

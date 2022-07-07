@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 from Cptool.config import toolConfig
 from Cptool.mavtool import load_param, select_sub_dict, read_path_specified_file
-from ModelFit.approximate import CyLSTM, Modeling
+from ModelFit.approximate import CyLSTM, Modeling, CyTCN
 from optimize.optimizer import GAOptimizer, AdamGradient
 
 
@@ -840,13 +840,13 @@ class FlyFixMavlink(DroneMavlink):
             if os.path.exists(self.log_file):
                 break
 
-    def online_bin_monitor(self, pitch_size_s=2):
+    def online_bin_monitor(self, pitch_size_s=3):
         time_last = 0
         accept_item = toolConfig.LOG_MAP.copy()
         # Wait for bin file created
         self.wait_bin_ready()
         file = open(self.log_file, 'rb')
-        repaired = False
+        # repaired = False
         while True:
             time.sleep(1)
             # Flush write buffer
@@ -870,16 +870,20 @@ class FlyFixMavlink(DroneMavlink):
                 feature_data = self.predictor.status2feature(status_data)
                 # create predicted status of this status patch
                 feature_x, feature_y = self.predictor.data_split(feature_data)
+                if isinstance(self.predictor, CyTCN):
+                    feature_y = feature_y.reshape((feature_y.shape[0], -1))
                 # Predict
                 predicted_feature = self.predictor.predict_feature(feature_x)
+                if isinstance(self.predictor, CyTCN):
+                    predicted_feature = predicted_feature.reshape((predicted_feature.shape[0], -1))
                 # deviation loss
                 patch_array_loss = self.predictor.cal_patch_deviation(predicted_feature, feature_y)
-
+                patch_average_loss = np.average(patch_array_loss)
                 logging.info(f"Time {status_data['TimeS'].iloc[0].round(1)} status' patch average loss:"
-                             f" {np.average(patch_array_loss)}")
+                             f" {patch_average_loss}")
 
-                # threshold 0.12
-                if np.average(patch_array_loss) > 0.12 and not repaired:
+                # threshold 0.6
+                if np.average(patch_average_loss) > 2:
                     self.repair_configuration(status_data)
                     repaired = True
 

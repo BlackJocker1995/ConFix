@@ -21,8 +21,12 @@ if __name__ == '__main__':
     cylstm.read_model()
 
     feature_x, feature_y = cylstm.data_split(feature)
+    if isinstance(cylstm, CyTCN):
+        feature_y = feature_y.reshape((feature_y.shape[0], -1))
 
     predicted_feature = cylstm.predict_feature(feature_x)
+    if isinstance(cylstm, CyTCN):
+        predicted_feature = predicted_feature.reshape((predicted_feature.shape[0], -1))
 
     patch_array_loss = Modeling.cal_patch_deviation(feature_y, predicted_feature)
 

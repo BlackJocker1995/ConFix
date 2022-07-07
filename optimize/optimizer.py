@@ -79,7 +79,7 @@ class GAOptimizer(DroneOptimizer):
                                  varTypes=varTypes, lb=lb, ub=ub, lbin=lbin, ubin=ubin)
 
     def start_optimize(self):
-        NINDs = 20
+        NINDs = 50
         Encoding = 'RI'  # 编码方式
         Field = ea.crtfld(Encoding, self.problem.varTypes, self.problem.ranges,
                           self.problem.borders)  # 创建区域描述器

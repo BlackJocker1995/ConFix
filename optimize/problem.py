@@ -5,7 +5,8 @@ import numpy as np
 import pandas as pd
 
 from Cptool.config import toolConfig
-from ModelFit.approximate import CyLSTM
+from ModelFit.approximate import CyLSTM, CyTCN
+from ModelFit.config import modelConfig
 
 
 class Problem():
@@ -52,8 +53,12 @@ class DTWLossProblem(Problem):
         feature_data = self.predictor.status2feature(try_statue_data)
         # create predicted status of this status patch
         feature_x, feature_y = self.predictor.data_split(feature_data)
+        if isinstance(self.predictor, CyTCN):
+            feature_y = feature_y.reshape((feature_y.shape[0], -1))
         # Predict
         predicted_feature = self.predictor.predict_feature(feature_x)
+        if isinstance(self.predictor, CyTCN):
+            predicted_feature = predicted_feature.reshape((predicted_feature.shape[0], -1))
         # deviation loss
         patch_array_loss = self.predictor.cal_patch_deviation(predicted_feature, feature_y)
 
@@ -80,13 +85,13 @@ class ProblemGA(ea.Problem, Problem):
         self.sensor_data = status_data[toolConfig.STATUS_ORDER]
         self.param_data = status_data[toolConfig.PARAM]
 
-    def aimFunc(self, configuration):
+    def aimFunc_other(self, configuration):
         x = configuration.Phen
         x = self.reasonable_range(x)
 
         each_loss = []
-        for sub_param in x.iterrows():
-            try_statue_data = self.status_data.replace(x)
+        for index, sub_param in x.iterrows():
+            try_statue_data = self.status_data.replace(sub_param)
             # status data to feature data
             feature_data = self.predictor.status2feature(try_statue_data)
             # create predicted status of this status patch
@@ -96,13 +101,44 @@ class ProblemGA(ea.Problem, Problem):
             # deviation loss
             patch_array_loss = self.predictor.cal_patch_deviation(predicted_feature, feature_y)
 
-            sub_loss = np.average(patch_array_loss)
-
-            each_loss.append(sub_loss)
+            each_loss.append(patch_array_loss)
 
         each_loss = np.array(each_loss).reshape((-1, 1))
 
         configuration.ObjV = each_loss
+
+    def aimFunc(self, configuration):
+        x = configuration.Phen
+        x = self.reasonable_range(x)
+
+        # repeat data
+        repeat_status = pd.concat([self.status_data] * x.shape[0]).reset_index(drop=True)
+        repeat_param = pd.DataFrame(np.repeat(x.values, self.status_data.shape[0], axis=0), columns=x.columns)
+        repeat_status[toolConfig.PARAM] = repeat_param
+
+        status_step = self.status_data.shape[0]
+        feature_step = self.status_data.shape[0] - modelConfig.INPUT_LEN
+        feature = pd.DataFrame()
+        for i in range(x.shape[0]):
+            status_index = i * status_step
+            feature_index = i * feature_step
+            tmp_status = repeat_status.iloc[status_index:status_index+status_step]
+            # status data to feature data
+            tmp_feature_data = self.predictor.status2feature(tmp_status)
+            feature = pd.concat([feature, tmp_feature_data])
+        # create predicted status of this status patch
+        feature_x, feature_y = self.predictor.data_split(feature)
+        # Predict
+        predicted_feature = self.predictor.predict_feature(feature_x)
+        # reshape to 3D (x number, status patch)
+        predicted_feature = predicted_feature.reshape((x.shape[0], -1, predicted_feature.shape[-1]))
+        feature_y = feature_y.reshape((x.shape[0], -1, predicted_feature.shape[-1]))
+        # deviation loss
+        patch_array_loss = self.predictor.cal_patch_deviation(predicted_feature, feature_y)
+
+        patch_average_loss = np.average(patch_array_loss, axis=1)
+
+        configuration.ObjV = patch_average_loss.reshape((-1, 1))
 
     def param_value2step(self, configuration):
         np_config = configuration * self.step

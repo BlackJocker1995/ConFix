@@ -24,7 +24,7 @@ toolConfig.SIM = "SITL"  # "Jmavsim"
 # Simulation Speed
 toolConfig.SPEED = 3
 # Flight home (None, AVC_plane)
-toolConfig.HOME = None  # "AVC_plane"
+toolConfig.HOME = "AVC_plane" # "AVC_plane"
 # Output Debug Message
 toolConfig.DEBUG = False
 # Wind Speed range
@@ -61,27 +61,49 @@ elif toolConfig.MODE == "PX4":
                                'AccX', 'AccY', 'AccZ', 'GyrX', 'GyrY', 'GyrZ',
                                'MagX', 'MagY', 'MagZ', 'VibeX', 'VibeY', 'VibeZ']
 # LOG_MAP = ['ATT', 'RATE']
+# toolConfig.PARAM = [
+#     "PSC_POSXY_P",
+#     "PSC_VELXY_P",
+#     "PSC_POSZ_P",
+#     "ATC_ANG_RLL_P",
+#     "ATC_RAT_RLL_I",
+#     "ATC_RAT_RLL_D",
+#     "ATC_RAT_RLL_P",
+#     "ATC_ANG_PIT_P",
+#     "ATC_RAT_PIT_P",
+#     "ATC_RAT_PIT_I",
+#     "ATC_RAT_PIT_D",
+#     "ATC_ANG_YAW_P",
+#     "ATC_RAT_YAW_P",
+#     "ATC_RAT_YAW_I",
+#     "ATC_RAT_YAW_D",
+#     "WPNAV_SPEED",
+#     "WPNAV_SPEED_UP",
+#     "WPNAV_SPEED_DN",
+#     "WPNAV_ACCEL",
+#     "ANGLE_MAX",
+# ]
 toolConfig.PARAM = [
-    "PSC_POSXY_P",
-    "PSC_VELXY_P",
-    "PSC_POSZ_P",
-    "ATC_ANG_RLL_P",
-    "ATC_RAT_RLL_I",
-    "ATC_RAT_RLL_D",
-    "ATC_RAT_RLL_P",
-    "ATC_ANG_PIT_P",
-    "ATC_RAT_PIT_P",
-    "ATC_RAT_PIT_I",
-    "ATC_RAT_PIT_D",
-    "ATC_ANG_YAW_P",
-    "ATC_RAT_YAW_P",
-    "ATC_RAT_YAW_I",
-    "ATC_RAT_YAW_D",
-    "WPNAV_SPEED",
-    "WPNAV_SPEED_UP",
-    "WPNAV_SPEED_DN",
-    "WPNAV_ACCEL",
-    "ANGLE_MAX",
+        "PSC_VELXY_P",
+        "PSC_VELXY_I",
+        "PSC_VELXY_D",
+        "PSC_ACCZ_P",
+        "PSC_ACCZ_I",
+        "ATC_ANG_RLL_P",
+        "ATC_RAT_RLL_P",
+        "ATC_RAT_RLL_I",
+        "ATC_RAT_RLL_D",
+        "ATC_ANG_PIT_P",
+        "ATC_RAT_PIT_P",
+        "ATC_RAT_PIT_I",
+        "ATC_RAT_PIT_D",
+        "ATC_ANG_YAW_P",
+        "ATC_RAT_YAW_P",
+        "ATC_RAT_YAW_I",
+        "ATC_RAT_YAW_D",
+        "WPNAV_SPEED",
+        "WPNAV_ACCEL",
+        "ANGLE_MAX"
 ]
 # LOG_MAP = ['ATT', 'RATE']
 toolConfig.INPUT_LEN = 3

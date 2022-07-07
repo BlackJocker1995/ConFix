@@ -8,6 +8,7 @@ from abc import abstractmethod
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from dtaidistance import dtw_ndim
 from keras.layers import Dense, Dropout, RepeatVector
 from keras.layers import LSTM
 from keras.models import Sequential
@@ -169,10 +170,11 @@ class Modeling(object):
 
         return predict_X
 
-    def status2feature(self, status_data: pd.DataFrame):
-        data = status_data.drop(["TimeS"], axis=1)
+    def status2feature(self, status_data):
         # extract patch
-        values = data.values
+        if "TimeS" in status_data.columns:
+            status_data = status_data.drop(["TimeS"], axis=1)
+        values = status_data.values
         values = self._cs_to_sl(values)
         return values
 
@@ -409,19 +411,23 @@ class Modeling(object):
         :param predicted_data: predicted data
         :return: status_deviation result which has been normalized
         """
-        if len(predicted_data.shape) > 2:
-            predicted_data = predicted_data.reshape([predicted_data.shape[0], predicted_data.shape[2]])
-            status_data = status_data.reshape([status_data.shape[0], status_data.shape[2]])
-
-        predicted_data = sliding_window_view(predicted_data, 6, axis=0).astype(dtype=np.double)
-        status_data = sliding_window_view(status_data, 6, axis=0).astype(dtype=np.double)
-
+        # if len(predicted_data.shape) > 2:
+        #     predicted_data = predicted_data.reshape([predicted_data.shape[0], predicted_data.shape[2]])
+        #     status_data = status_data.reshape([status_data.shape[0], status_data.shape[2]])
+        deviation = np.abs(status_data - predicted_data)
+        if len(predicted_data.shape) == 3:
+            sliding_patch = sliding_window_view(deviation, 6, axis=1).astype(dtype=np.double)
+            loss = sliding_patch.sum(axis=tuple(range(2, 4)))
+        else:
+            sliding_patch = sliding_window_view(deviation, 6, axis=0).astype(dtype=np.double)
+            loss = sliding_patch.sum(axis=1).sum(axis=1)
+        # predicted_data = sliding_window_view(predicted_data, 6, axis=0).astype(dtype=np.double)
+        # status_data = sliding_window_view(status_data, 6, axis=0).astype(dtype=np.double)
         # Dynamic Time Warping (DTW) distance
         # loss = []
         # for predicted_item, status_item in zip(predicted_data, status_data):
         #     loss.append(dtw_ndim.distance_fast(predicted_item, status_item))
-        # loss = np.array(loss)
-        loss = np.average(np.abs(status_data - predicted_data).sum(axis=1), axis=1)
+        # loss = np.average(np.array(loss))
         return loss
 
     @classmethod
@@ -448,8 +454,8 @@ class CyLSTM(Modeling):
         self.epochs = epochs
         self.batch_size: int = batch_size
 
-    def data_split(self, value):
-        values = value.values
+    def data_split(self, values):
+        values = values.values
 
         # split into input and outputs
         X = values[:, :modelConfig.INPUT_DATA_LEN]

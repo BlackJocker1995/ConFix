@@ -40,7 +40,7 @@ if __name__ == '__main__':
 
         manager.mav_monitor.set_mission('Cptool/mission.txt', True)
 
-        manager.mav_monitor.set_random_param_and_start()
+        # manager.mav_monitor.set_random_param_and_start()
         # manager.mav_monitor.start_mission()
 
         # manager.start_mav_monitor()

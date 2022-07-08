@@ -1,5 +1,5 @@
 """
-SimManager Version: 3.3
+SimManager Version: 3.4
 """
 import logging
 import multiprocessing
@@ -39,7 +39,8 @@ class SimManager(object):
         # Airsim
         cmd = None
         if toolConfig.SIM == 'Airsim':
-            cmd = f'gnome-terminal -- {toolConfig.AIRSIM_PATH} -ResX={toolConfig.HEIGHT} -ResY={toolConfig.WEIGHT} -windowed'
+            cmd = f'gnome-terminal -- {toolConfig.AIRSIM_PATH} ' \
+                  f'-ResX={toolConfig.HEIGHT} -ResY={toolConfig.WEIGHT} -windowed'
         if toolConfig.SIM == 'Jmavsim':
             cmd = f'gnome-terminal -- bash /home/rain/PX4-Autopilot/Tools/jmavsim_run.sh'
         if toolConfig.SIM == 'Morse':
@@ -64,8 +65,14 @@ class SimManager(object):
         cmd = None
         if toolConfig.MODE == 'Ardupilot':
             if toolConfig.SIM == 'Airsim':
-                cmd = f"python3 /home/rain/ardupilot/Tools/autotest/sim_vehicle.py -v ArduCopter -f airsim-copter " \
-                      f"--out=127.0.0.1:14550 --out=127.0.0.1:14540 -S {toolConfig.SPEED}"
+                if toolConfig.HOME is not None:
+                    cmd = f"python3 /home/rain/ardupilot/Tools/autotest/sim_vehicle.py -v ArduCopter " \
+                          f"--location={toolConfig.HOME}" \
+                          f" -f airsim-copter --out=127.0.0.1:14550 --out=127.0.0.1:14540 " \
+                          f" -S {toolConfig.SPEED}"
+                else:
+                    cmd = f"python3 /home/rain/ardupilot/Tools/autotest/sim_vehicle.py -v ArduCopter -f airsim-copter " \
+                          f"--out=127.0.0.1:14550 --out=127.0.0.1:14540 -S {toolConfig.SPEED}"
             if toolConfig.SIM == 'Morse':
                 cmd = f"python3 /home/rain/ardupilot/Tools/autotest/sim_vehicle.py -v ArduCopter --model morse-quad " \
                       f"--add-param-file=/home/rain/ardupilot/libraries/SITL/examples/Morse/quadcopter.parm  " \
@@ -83,26 +90,29 @@ class SimManager(object):
             self._sitl_task = pexpect.spawn(cmd, cwd=toolConfig.ARDUPILOT_LOG_PATH, timeout=30, encoding='utf-8')
 
         if toolConfig.MODE == 'PX4':
-            pre_argv = f"PX4_HOME_LAT=40.072842 " \
-                       f"PX4_HOME_LON=-105.230575 " \
-                       f"PX4_HOME_ALT=0 " \
-                       f"PX4_SIM_SPEED_FACTOR={toolConfig.SPEED} "
+            pre_argv = ["export PX4_HOME_LAT=-35.362758",
+                        "export PX4_HOME_LON=149.165135 ",
+                        "export PX4_HOME_ALT=583.730592",
+                        "export PX4_SIM_SPEED_FACTOR={toolConfig.SPEED} "]
+            for arg in pre_argv:
+                os.system(arg)
+                time.sleep(0.3)
             if toolConfig.SIM == 'Airsim':
-                cmd = f'make {pre_argv} px4_sitl_default none_iris'
+                cmd = f'make px4_sitl_default none_iris'
             if toolConfig.SIM == 'Jmavsim':
-                cmd = f'HEADLESS=1 make {pre_argv} px4_sitl_default jmavsim'
+                cmd = f'make px4_sitl_default jmavsim'
 
             self._sitl_task = pexpect.spawn(cmd, cwd=toolConfig.PX4_LOG_PATH, timeout=30, encoding='utf-8')
         logging.info(f"Start {toolConfig.MODE} --> [{toolConfig.SIM}]")
         if cmd is None:
             raise ValueError('Not support mode or simulator')
 
-    def sim_monitor_init(self):
+    def sim_monitor_init(self, simulator_class):
         """
         初始化airsim监控器
         :return:
         """
-        self.sim_monitor = SimSimulator(recv_msg_queue=self.mav_msg_queue, send_msg_queue=self.sim_msg_queue)
+        self.sim_monitor = simulator_class(recv_msg_queue=self.mav_msg_queue, send_msg_queue=self.sim_msg_queue)
         time.sleep(3)
 
     def mav_monitor_init(self, mavlink_class: DroneMavlink = DroneMavlink):
@@ -115,12 +125,11 @@ class SimManager(object):
         if toolConfig.MODE == 'Ardupilot':
             if self.mav_monitor.ready2fly():
                 return True
-        elif toolConfig.MODE == 'PX4':
-            while True:
-                line = self._sitl_task.readline()
-                if 'notify negative' in line:
-                    logging.debug("Ready to fly.")
-                    break
+        # elif toolConfig.MODE == 'PX4':
+        #     while True:
+        #         line = self._sitl_task.readline()
+        #         if 'notify negative' in line:
+        #             return True
 
     def mav_monitor_connect(self):
         """
@@ -144,6 +153,12 @@ class SimManager(object):
 
     def sim_close_msg(self):
         pass
+
+    def change_sitl_wind(self, direction=60, speed=10):
+        self._sitl_task.send(f'param set SIM_WIND_DIR {direction} \n')
+        time.sleep(0.1)
+        self._sitl_task.send(f'param set SIM_WIND_SPD {speed} \n')
+        logging.info(f"Wind change to direction {direction} and {speed} m/s")
 
     def stop_sitl(self):
         self._sitl_task.sendcontrol('c')
@@ -187,7 +202,7 @@ class FixSimManager(SimManager):
         self.mav_monitor.set_params(params_value)
 
     def sim_monitor_set_wind(self, button, top):
-        self._sim_monitor.set_wind_random(button, top)
+        self.sim_monitor.set_wind_random(button, top)
 
     def start_sim_monitor(self):
         """

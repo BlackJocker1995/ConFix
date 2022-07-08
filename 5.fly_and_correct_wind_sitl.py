@@ -18,12 +18,15 @@ if __name__ == '__main__':
 
     mav_monitor.init_predictor(CyTCN, 100, 128)
 
-    mav_monitor.set_mission('Cptool/fitCollection.txt', True)
+    mav_monitor.set_mission('Cptool/fitCollection.txt', False)
 
-    # mav_monitor.set_random_param_and_start()
+    manager.change_sitl_wind()
+
     mav_monitor.start_mission()
 
     mav_monitor.init_bin_log_file()
+
+    time.sleep(10)
 
     # mav_monitor.start()
     mav_monitor.online_bin_monitor()

@@ -1,12 +1,13 @@
 import geatpy as ea
 import numpy as np
 import pandas as pd
+from bayes_opt import BayesianOptimization
 from scipy.optimize import minimize
-
+from sko.PSO import PSO
 from Cptool.config import toolConfig
 from Cptool.mavtool import load_param, select_sub_dict, read_unit_from_dict, read_range_from_dict
 from ModelFit.approximate import CyLSTM
-from optimize.problem import Problem, DTWLossProblem, ProblemGA
+from optimize.problem import Problem, ProblemFunLoss, ProblemGA
 
 
 class DroneOptimizer:
@@ -41,8 +42,8 @@ class DroneOptimizer:
 
 class AdamGradient(DroneOptimizer):
     def __init__(self):
-        super().__init__()
-        self.problem = DTWLossProblem()
+        super(AdamGradient).__init__()
+        self.problem = ProblemFunLoss()
 
     def start_optimize(self):
         configuration = minimize(self.problem.function, self.start_value, bounds=self.param_bounds,
@@ -52,9 +53,43 @@ class AdamGradient(DroneOptimizer):
         return configuration
 
 
+class BayesOptimizer(DroneOptimizer):
+    def __init__(self):
+        super(BayesOptimizer, self).__init__()
+        self.problem = ProblemFunLoss()
+
+    def start_optimize(self):
+        bounds = pd.Series(self.param_bounds.tolist()).to_dict()
+        optimizer = BayesianOptimization(
+            f=self.problem.function,
+            pbounds=bounds,
+            verbose=2,
+            random_state=1,
+        )
+        optimizer.maximize(
+            init_points=20,
+            n_iter=20,
+        )
+        configuration = optimizer.max
+        return configuration
+
+
+class PSOOptimizer(DroneOptimizer):
+    def __init__(self):
+        super(PSOOptimizer, self).__init__()
+        self.problem = ProblemFunLoss()
+
+    def start_optimize(self):
+        pso = PSO(func=self.problem.function, n_dim=len(self.participle_param),
+                  pop=40, max_iter=20,
+                  lb=self.param_bounds[:, 0],
+                  ub=self.param_bounds[:, 1])
+        pso.run()
+
+
 class GAOptimizer(DroneOptimizer):
     def __init__(self):
-        super().__init__()
+        super(DroneOptimizer).__init__()
 
         self.participle_param = toolConfig.PARAM
         para_dict = load_param()

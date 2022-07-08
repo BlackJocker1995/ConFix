@@ -17,7 +17,7 @@ from tqdm import tqdm
 from Cptool.config import toolConfig
 from Cptool.mavtool import load_param, select_sub_dict, read_path_specified_file
 from ModelFit.approximate import CyLSTM, Modeling, CyTCN
-from optimize.optimizer import GAOptimizer, AdamGradient
+from optimize.optimizer import GAOptimizer, AdamGradient, BayesOptimizer, PSOOptimizer
 
 
 class MavTool:
@@ -73,7 +73,7 @@ class DroneMavlink(multiprocessing.Process):
         except TimeoutError:
             return False
         logging.info("Heartbeat from system (system %u component %u) from %u" % (
-            self._master.target_system, self._master.target_system, self._port))
+            self._master.target_system, self._master.target_component, self._port))
         return True
 
     def ready2fly(self) -> bool:
@@ -107,6 +107,8 @@ class DroneMavlink(multiprocessing.Process):
 
         loader = mavwp.MAVWPLoader()
         loader.load(mission_file)
+        loader.target_system = self._master.target_system
+        loader.target_component = self._master.target_component
         logging.debug(f"Load mission file {mission_file}")
 
         # if px4, set home at first
@@ -122,15 +124,16 @@ class DroneMavlink(multiprocessing.Process):
         seq_list = [True] * loader.count()
         try:
             # looping to send each waypoint information
+            # Ardupilot method
             while True in seq_list:
-                msg = self._master.recv_match(type=['MISSION_REQUEST'], blocking=True,
-                                              timeout=timeout)
+                msg = self._master.recv_match(type=['MISSION_REQUEST'], blocking=True)
                 if msg is not None and seq_list[msg.seq] is True:
                     self._master.mav.send(loader.wp(msg.seq))
+                    print(loader.wp(msg.seq))
                     seq_list[msg.seq] = False
                     logging.debug(f'Sending waypoint {msg.seq}')
             mission_ack_msg = self._master.recv_match(type=['MISSION_ACK'], blocking=True, timeout=timeout)
-            logging.info('Upload mission finish.')
+            logging.info(f'Upload mission finish.')
         except TimeoutError:
             logging.warning('Upload mission timeout!')
             return False
@@ -235,16 +238,18 @@ class DroneMavlink(multiprocessing.Process):
         self.start_mission()
 
     def px4_set_home(self):
-        self._master.mav.command_long_send(self._master.mav.target_system, self._master.mav.target_componet,
+        self._master.mav.command_long_send(self._master.target_system, self._master.target_component,
                                            mavutil.mavlink.MAV_CMD_DO_SET_HOME,
                                            1,
                                            0,
                                            0,
                                            0,
                                            0,
-                                           40.072842,
-                                           -105.230575,
-                                           0)
+                                           -35.362758,
+                                           149.165135,
+                                           583.730592)
+        msg = self._master.recv_match(type=['COMMAND_ACK'], blocking=True, timeout=30)
+        logging.debug(f"Home set callback: {msg.command}")
 
     def wait_complete(self):
         pass
@@ -618,7 +623,7 @@ class FlyFixMavlink(DroneMavlink):
         log_index = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/LASTLOG.TXT"
         # Read last index
         with open(log_index, 'r') as f:
-            num = int(f.readline()) + 1
+            num = int(f.readline())
             # To string
         num = f'{num}'
         self.log_file = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/{num.rjust(8, '0')}.BIN"
@@ -739,7 +744,7 @@ class FlyFixMavlink(DroneMavlink):
     def repair_configuration(self, status_data):
         logging.info("Start repair with parameter")
         start = time.time()
-        optimize = GAOptimizer()
+        optimize = PSOOptimizer()
         optimize.set_status(status_data)
         optimize.set_predictor(self.predictor)
         optimize.set_bounds()
@@ -846,7 +851,7 @@ class FlyFixMavlink(DroneMavlink):
         # Wait for bin file created
         self.wait_bin_ready()
         file = open(self.log_file, 'rb')
-        # repaired = False
+        repaired = False
         while True:
             time.sleep(1)
             # Flush write buffer
@@ -855,7 +860,7 @@ class FlyFixMavlink(DroneMavlink):
             self.flight_log = mavutil.mavlink_connection(self.log_file)
             # inti param value
             self.init_current_param()
-            try:
+            if True:
                 # Read flight status
                 status_data = self.read_status_patch_bin(time_last, pitch_size_s)
                 # Check landed or read failure
@@ -882,13 +887,13 @@ class FlyFixMavlink(DroneMavlink):
                 logging.info(f"Time {status_data['TimeS'].iloc[0].round(1)} status' patch average loss:"
                              f" {patch_average_loss}")
 
-                # threshold 0.6
-                if np.average(patch_average_loss) > 2:
+                # threshold 2.3
+                if np.average(patch_average_loss) > 1.5 and not repaired:
                     self.repair_configuration(status_data)
                     repaired = True
 
-            except Exception as e:
-                logging.warning(f"{e}, then continue looping")
+            # except Exception as e:
+            #     logging.warning(f"{e}, then continue looping")
 
             # Drop old message
             while True:
@@ -899,37 +904,37 @@ class FlyFixMavlink(DroneMavlink):
                     # Update timestamp
                     time_last = msg.TimeUS
 
-    def run(self) -> None:
-        accept_item = toolConfig.LOG_MAP.copy()
-        accept_item.remove("PARM")
-        # Collect data in one time_unit
-        time_last = 0
-
-        while True:
-            # Lode the BIN file
-            time.sleep(0.1)
-            logging.info(f"Time_last : {time_last}")
-            flight_log = mavutil.mavlink_connection(self.log_file, zero_time_base=time_last)
-            # Loop to read status
-            while True:
-                if not self.send_msg_queue.empty():
-                    notify = self.send_msg_queue.get()
-                    logging.info(f"Notify get : {notify}")
-                    if notify == "break":
-                        print(f"self.read_finish : {self.read_finish}")
-                        while not self.recv_msg_queue.empty():
-                            time_last = self.recv_msg_queue.get()["TimeS"]
-                        break
-
-                msg = flight_log.recv_match(type=accept_item, blocking=True)
-                if msg is None:
-                    continue
-                else:
-                    if msg.get_type() in ['ATT', 'RATE']:
-                        data = FixMavlink.log_extract_apm(msg)
-                    elif msg.get_type() in ['IMU', 'MAG'] and msg.I == 0:
-                        data = FixMavlink.log_extract_apm(msg)
-                    elif msg.get_type() == 'VIBE' and msg.IMU == 0:
-                        data = FixMavlink.log_extract_apm(msg)
-                    # Callback to main thread to predict status
-                    self.recv_msg_queue.put(data)
+    # def run(self) -> None:
+    #     accept_item = toolConfig.LOG_MAP.copy()
+    #     accept_item.remove("PARM")
+    #     # Collect data in one time_unit
+    #     time_last = 0
+    #
+    #     while True:
+    #         # Lode the BIN file
+    #         time.sleep(0.1)
+    #         logging.info(f"Time_last : {time_last}")
+    #         flight_log = mavutil.mavlink_connection(self.log_file, zero_time_base=time_last)
+    #         # Loop to read status
+    #         while True:
+    #             if not self.send_msg_queue.empty():
+    #                 notify = self.send_msg_queue.get()
+    #                 logging.info(f"Notify get : {notify}")
+    #                 if notify == "break":
+    #                     print(f"self.read_finish : {self.read_finish}")
+    #                     while not self.recv_msg_queue.empty():
+    #                         time_last = self.recv_msg_queue.get()["TimeS"]
+    #                     break
+    #
+    #             msg = flight_log.recv_match(type=accept_item, blocking=True)
+    #             if msg is None:
+    #                 continue
+    #             else:
+    #                 if msg.get_type() in ['ATT', 'RATE']:
+    #                     data = FixMavlink.log_extract_apm(msg)
+    #                 elif msg.get_type() in ['IMU', 'MAG'] and msg.I == 0:
+    #                     data = FixMavlink.log_extract_apm(msg)
+    #                 elif msg.get_type() == 'VIBE' and msg.IMU == 0:
+    #                     data = FixMavlink.log_extract_apm(msg)
+    #                 # Callback to main thread to predict status
+    #                 self.recv_msg_queue.put(data)

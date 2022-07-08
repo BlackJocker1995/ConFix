@@ -40,7 +40,7 @@ class Problem():
         pass
 
 
-class DTWLossProblem(Problem):
+class ProblemFunLoss(Problem):
     def __init__(self):
         super().__init__()
 

@@ -16,17 +16,17 @@ class ToolConfig:
 toolConfig = ToolConfig()
 # SITL Type PX4 and Ardupilot
 # {'PX4','Ardupilot'}
-toolConfig.MODE = 'Ardupilot'  # "PX4" #
+toolConfig.MODE = "PX4"  # "PX4" #
 # Simulation Type
 # Ardupilot : ['Airsim', 'Morse', 'Gazebo', 'SITL']
 # PX4 : ['Jmavsim']
-toolConfig.SIM = "SITL"  # "Jmavsim"
+toolConfig.SIM = "Jmavsim"  # "Jmavsim"
 # Simulation Speed
 toolConfig.SPEED = 3
 # Flight home (None, AVC_plane)
-toolConfig.HOME = "AVC_plane" # "AVC_plane"
+toolConfig.HOME = None # "AVC_plane"
 # Output Debug Message
-toolConfig.DEBUG = False
+toolConfig.DEBUG = True
 # Wind Speed range
 toolConfig.WIND_RANGE = [8, 10.7]
 # GUI Windows size
@@ -37,6 +37,9 @@ toolConfig.LIMIT_H = 50
 toolConfig.LIMIT_L = 40
 # Copter LOG Path
 toolConfig.ARDUPILOT_LOG_PATH = '/media/rain/data'
+# Airsim
+toolConfig.AIRSIM_PATH = "/media/rain/data/airsim/Africa_Savannah/LinuxNoEditor/Africa_001.sh"
+# toolConfig.AIRSIM_PATH = "/media/rain/data/airsim/Blocks/LinuxNoEditor/Blocks.sh"
 # PX4 LOG Path
 toolConfig.PX4_LOG_PATH = '/home/rain/PX4-Autopilot'
 if toolConfig.MODE == "Ardupilot":

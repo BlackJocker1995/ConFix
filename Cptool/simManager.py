@@ -14,7 +14,7 @@ from Cptool.mavlink import DroneMavlink
 from Cptool.simSimulator import SimSimulator
 
 
-class SimManager(object):
+class SimManager:
     def __init__(self, debug: bool = False):
         self._sim_task = None
         self._sitl_task = None
@@ -90,17 +90,17 @@ class SimManager(object):
             self._sitl_task = pexpect.spawn(cmd, cwd=toolConfig.ARDUPILOT_LOG_PATH, timeout=30, encoding='utf-8')
 
         if toolConfig.MODE == 'PX4':
-            pre_argv = ["export PX4_HOME_LAT=-35.362758",
-                        "export PX4_HOME_LON=149.165135 ",
-                        "export PX4_HOME_ALT=583.730592",
-                        "export PX4_SIM_SPEED_FACTOR={toolConfig.SPEED} "]
-            for arg in pre_argv:
-                os.system(arg)
-                time.sleep(0.3)
+            pre_argv = f"PX4_HOME_LAT=-35.362758 "\
+                        f"PX4_HOME_LON=149.165135 "\
+                        f"PX4_HOME_ALT=583.730592 "\
+                        f"PX4_SIM_SPEED_FACTOR={toolConfig.SPEED}"
+            # for arg in pre_argv:
+            #     os.system(arg)
+            #     time.sleep(0.3)
             if toolConfig.SIM == 'Airsim':
                 cmd = f'make px4_sitl_default none_iris'
             if toolConfig.SIM == 'Jmavsim':
-                cmd = f'make px4_sitl_default jmavsim'
+                cmd = f'make {pre_argv} px4_sitl_default jmavsim'
 
             self._sitl_task = pexpect.spawn(cmd, cwd=toolConfig.PX4_LOG_PATH, timeout=30, encoding='utf-8')
         logging.info(f"Start {toolConfig.MODE} --> [{toolConfig.SIM}]")
@@ -125,11 +125,15 @@ class SimManager(object):
         if toolConfig.MODE == 'Ardupilot':
             if self.mav_monitor.ready2fly():
                 return True
-        # elif toolConfig.MODE == 'PX4':
-        #     while True:
-        #         line = self._sitl_task.readline()
-        #         if 'notify negative' in line:
-        #             return True
+        elif toolConfig.MODE == 'PX4':
+            while True:
+                line = self._sitl_task.readline()
+                if 'notify' in line:
+                    # Disable the fail warning and return
+                    self._sitl_task.send("param set NAV_RCL_ACT 0 \n")
+                    time.sleep(0.1)
+                    self._sitl_task.send("param set NAV_DLL_ACT 0 \n")
+                    return True
 
     def mav_monitor_connect(self):
         """
@@ -178,10 +182,11 @@ class SimManager(object):
         return self._sim_task
 
 
-class FixSimManager(SimManager):
+class FixSimManager(SimManager, multiprocessing.Process):
 
     def __init__(self, debug: bool = False):
         super(FixSimManager, self).__init__(debug)
+        super(multiprocessing.Process, self).__init__()
 
     def mav_monitor_set_mission(self, mission_file, random: bool = False):
         """
@@ -236,40 +241,8 @@ class FixSimManager(SimManager):
         self.sim_monitor_init()
         self.sim_monitor_confirm_api()
 
-    def run(self):
-        if not self._master:
-            raise ValueError('Connect at first!')
-        message = {'seq': 7}
+    def run(self) -> None:
         while True:
-            print(message)
-            try:
-                if message['seq'] == 7:
-                    # # Change Params
-
-                    names, values = self.create_random_params()
-                    self.set_params(names, values)
-                    # Unlock the uav
-                    self.master.set_mode_manual()
-                    self.master.arducopter_arm()
-                    self.master.set_mode_auto()
-                message = self.master.recv_match(type=['MISSION_ITEM_REACHED'], blocking=True, timeout=timeout)
-                if message is not None:
-                    message = message.to_dict()
-
-                    # Change Params
-                    # names, values = self.create_random_params()
-                    # self.set_params(names, values)
-                else:
-                    print('message is None')
-                    message = {'seq': 7}
-                    continue
-                # print(message)
-            except TimeoutError:
-                # Mission point time out, change other params
-                print('wp timeout! change param')
-                names, values = self.create_random_params()
-                self.set_params(names, values)
-            except KeyboardInterrupt:
-                print('Key bordInterrupt! exit')
-                self.master.set_mode_rtl()
-                break
+            line = self._sitl_task.readline()
+            time.sleep(0.1)
+            print(line)

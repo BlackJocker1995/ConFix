@@ -2,7 +2,7 @@ import multiprocessing
 import time
 
 from Cptool.config import toolConfig
-from Cptool.mavlink import FlyFixMavlink
+from Cptool.mavlink import FlyFixMavlinkAPM
 from Cptool.simManager import FixSimManager
 from Cptool.simSimulator import GaSimSimulator
 from ModelFit.approximate import CyTCN
@@ -15,7 +15,7 @@ if __name__ == '__main__':
 
     manager.start_sitl()
 
-    manager.mav_monitor_init(FlyFixMavlink)
+    manager.mav_monitor_init(FlyFixMavlinkAPM)
     manager.sim_monitor_confirm_api()
 
     manager.mav_monitor_set_mission("Cptool/mission.txt", random=False)

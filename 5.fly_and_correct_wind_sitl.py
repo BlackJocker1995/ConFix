@@ -2,7 +2,7 @@ import multiprocessing
 import time
 
 from Cptool.config import toolConfig
-from Cptool.mavlink import FlyFixMavlink
+from Cptool.mavlink import FlyFixMavlinkAPM
 from Cptool.simManager import FixSimManager
 from ModelFit.approximate import CyTCN
 
@@ -11,7 +11,7 @@ if __name__ == '__main__':
 
     # manager.start_sitl()
 
-    mav_monitor = FlyFixMavlink(14540, multiprocessing.Queue(), multiprocessing.Queue())
+    mav_monitor = FlyFixMavlinkAPM(14540, multiprocessing.Queue(), multiprocessing.Queue())
     mav_monitor.connect()
     # while not mav_monitor.ready2fly():
     #     time.sleep(0.1)

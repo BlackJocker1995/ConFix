@@ -3,7 +3,7 @@ import time
 from datetime import datetime
 
 from Cptool.config import toolConfig
-from Cptool.mavlink import FixMavlink, DroneMavlink
+from Cptool.mavlink import FixMavlinkAPM, DroneMavlink, FixMavlinkPX4
 from Cptool.simManager import FixSimManager
 
 
@@ -36,7 +36,7 @@ if __name__ == '__main__':
 
         manager.start_sitl()
 
-        manager.mav_monitor_init(FixMavlink)
+        manager.mav_monitor_init(FixMavlinkPX4)
 
         manager.mav_monitor.set_mission('Cptool/mission.txt', True)
 

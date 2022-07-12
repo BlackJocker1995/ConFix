@@ -53,4 +53,4 @@ if __name__ == '__main__':
 
         if not result:
             # Delete current log
-            DroneMavlink.delete_current_log()
+            CollectMavlinkAPM.delete_current_log()

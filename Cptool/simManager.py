@@ -1,5 +1,5 @@
 """
-SimManager Version: 3.4
+SimManager Version: 4.0
 """
 import logging
 import multiprocessing
@@ -102,7 +102,7 @@ class SimManager:
             if toolConfig.SIM == 'Jmavsim':
                 cmd = f'make {pre_argv} px4_sitl_default jmavsim'
 
-            self._sitl_task = pexpect.spawn(cmd, cwd=toolConfig.PX4_LOG_PATH, timeout=30, encoding='utf-8')
+            self._sitl_task = pexpect.spawn(cmd, cwd=toolConfig.PX4_RUN_PATH, timeout=30, encoding='utf-8')
         logging.info(f"Start {toolConfig.MODE} --> [{toolConfig.SIM}]")
         if cmd is None:
             raise ValueError('Not support mode or simulator')

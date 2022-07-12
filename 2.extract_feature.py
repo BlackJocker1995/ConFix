@@ -11,4 +11,4 @@ if __name__ == '__main__':
     lstm = CyLSTM(100, 512)
     feature = lstm.extract_feature(f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/bin_changed_avc/csv")
     # Save
-    feature.to_csv("model/features.csv", index=False)
+    feature.to_csv(f"model/{toolConfig.ARDUPILOT_LOG_PATH}/features.csv", index=False)

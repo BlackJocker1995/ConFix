@@ -5,6 +5,7 @@ import os
 import random
 import time
 
+import glob
 import numpy as np
 import pandas as pd
 import ray
@@ -18,37 +19,6 @@ from Cptool.config import toolConfig
 from Cptool.mavtool import load_param, select_sub_dict, read_path_specified_file
 from ModelFit.approximate import CyLSTM, Modeling, CyTCN
 from optimize.optimizer import GAOptimizer, AdamGradient, BayesOptimizer, PSOOptimizer
-
-
-class MavTool:
-    @staticmethod
-    def load_param() -> json:
-        """
-        load parameter we want to fuzzing
-        :return:
-        """
-        if toolConfig.MODE == 'Ardupilot':
-            path = 'Cptool/param_ardu.json'
-        elif toolConfig.MODE == 'PX4':
-            path = 'Cptool/param_px4.json'
-        with open(path, 'r') as f:
-            return pd.DataFrame(json.loads(f.read()))
-
-    @staticmethod
-    def get_default_values(para_dict):
-        return para_dict.loc[['default']]
-
-    @staticmethod
-    def select_sub_dict(para_dict, param_choice):
-        return para_dict[param_choice]
-
-    @staticmethod
-    def read_range_from_dict(para_dict):
-        return np.array(para_dict.loc['range'].to_list())
-
-    @staticmethod
-    def read_unit_from_dict(para_dict):
-        return para_dict.loc['step'].to_numpy()
 
 
 class DroneMavlink(multiprocessing.Process):
@@ -89,9 +59,6 @@ class DroneMavlink(multiprocessing.Process):
             if toolConfig.MODE == "Ardupilot" and "IMU0 is using GPS" in message:
                 logging.debug("Ready to fly.")
                 return True
-            # if toolConfig.MODE == "PX4":
-            #     logging.debug("Ready to fly.")
-            #     return True
 
     def set_mission(self, mission_file, israndom: bool = False, timeout=30) -> bool:
         """
@@ -270,24 +237,6 @@ class DroneMavlink(multiprocessing.Process):
         return out_dict
 
     @staticmethod
-    def delete_current_log():
-        log_index = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/LASTLOG.TXT"
-
-        # Read last index
-        with open(log_index, 'r') as f:
-            num = int(f.readline())
-        # To string
-        num = f'{num}'
-        log_file = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/{num.rjust(8, '0')}.BIN"
-        # Remove file
-        if os.path.exists(log_file):
-            os.remove(log_file)
-            # Fix last index number
-            last_num = f"{int(num) - 1}"
-            with open(log_index, 'w') as f:
-                f.write(last_num)
-
-    @staticmethod
     def random_mission(loader):
         """
         create random order of a mission
@@ -301,6 +250,54 @@ class DroneMavlink(multiprocessing.Process):
             points.seq = i
         loader.wpoints = index
         return loader
+
+    @staticmethod
+    def extract_log_path(log_path, skip=True, threat=None):
+        """
+        extract and convert bin file to csv
+        :param skip:
+        :param log_path:
+        :param threat: multiple threat
+        :return:
+        """
+
+        # If px4, the log is ulg, if ardupilot the log is bin
+        if toolConfig.MODE == "PX4":
+            file_list = read_path_specified_file(log_path, 'ulg')
+        else:
+            file_list = read_path_specified_file(log_path, 'BIN')
+        if not os.path.exists(f"{log_path}/csv"):
+            os.makedirs(f"{log_path}/csv")
+
+        # multiple
+        if threat is not None:
+            arrays = np.array_split(file_list, threat)
+            threat_manage = []
+            ray.init(include_dashboard=True, dashboard_host="10.0.0.14", dashboard_port=8088)
+
+            for array in arrays:
+                if toolConfig.MODE == "PX4":
+                    threat_manage.append(CollectMavlinkPX4.extract_log_path_threat.remote(log_path, array, skip))
+                else:
+                    threat_manage.append(CollectMavlinkAPM.extract_log_path_threat.remote(log_path, array, skip))
+            ray.get(threat_manage)
+            ray.shutdown()
+        else:
+            # 列出文件夹内所有.BIN结尾的文件并排序
+            for file in tqdm(file_list):
+                name, _ = file.split('.')
+                if skip and os.path.exists(f'{log_path}/csv/{name}.csv'):
+                    continue
+                # extract
+                try:
+                    if toolConfig.MODE == "PX4":
+                        csv_data = CollectMavlinkPX4.extract_log_file(log_path + f'/{file}')
+                    else:
+                        csv_data = CollectMavlinkAPM.extract_log_file(log_path + f'/{file}')
+                    csv_data.to_csv(f'{log_path}/csv/{name}.csv', index=False)
+                except Exception as e:
+                    logging.warning(f"Error processing {file} : {e}")
+                    continue
 
 
 class CollectMavlinkAPM(DroneMavlink):
@@ -441,44 +438,6 @@ class CollectMavlinkAPM(DroneMavlink):
         return pd_array
 
     @staticmethod
-    def extract_log_path(log_path, skip=True, threat=None):
-        """
-        extract and convert bin file to csv
-        :param skip:
-        :param log_path:
-        :param threat: multiple threat
-        :return:
-        """
-
-        file_list = read_path_specified_file(log_path, 'BIN')
-        if not os.path.exists(f"{log_path}/csv"):
-            os.makedirs(f"{log_path}/csv")
-
-        # multiple
-        if threat is not None:
-            arrays = np.array_split(file_list, threat)
-            threat_manage = []
-            ray.init(include_dashboard=True, dashboard_host="10.0.0.14", dashboard_port=8088)
-
-            for array in arrays:
-                threat_manage.append(CollectMavlinkAPM.extract_log_path_threat.remote(log_path, array, skip))
-            ray.get(threat_manage)
-            ray.shutdown()
-        else:
-            # 列出文件夹内所有.BIN结尾的文件并排序
-            for file in tqdm(file_list):
-                name, _ = file.split('.')
-                if skip and os.path.exists(f'{log_path}/csv/{name}.csv'):
-                    continue
-                # extract
-                # try:
-                csv_data = CollectMavlinkAPM.extract_log_file(log_path + f'/{file}')
-                csv_data.to_csv(f'{log_path}/csv/{name}.csv', index=False)
-                # except Exception as e:
-                #     logging.warning(f"Error processing {file} : {e}")
-                #     continue
-
-    @staticmethod
     @ray.remote
     def extract_log_path_threat(log_path, file_list, skip):
         for file in tqdm(file_list):
@@ -508,6 +467,24 @@ class CollectMavlinkAPM(DroneMavlink):
             random_sample = random.randrange(range[0], range[1], step)
             out[name] = random_sample
         return out
+
+    @staticmethod
+    def delete_current_log():
+        log_index = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/LASTLOG.TXT"
+
+        # Read last index
+        with open(log_index, 'r') as f:
+            num = int(f.readline())
+        # To string
+        num = f'{num}'
+        log_file = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/{num.rjust(8, '0')}.BIN"
+        # Remove file
+        if os.path.exists(log_file):
+            os.remove(log_file)
+            # Fix last index number
+            last_num = f"{int(num) - 1}"
+            with open(log_index, 'w') as f:
+                f.write(last_num)
 
     def wait_complete(self, remain_fail=False, timeout=60 * 5):
         if not self._master:
@@ -849,41 +826,6 @@ class FlyFixMavlinkAPM(DroneMavlink):
                     # Update timestamp
                     time_last = msg.TimeUS
 
-    # def run(self) -> None:
-    #     accept_item = toolConfig.LOG_MAP.copy()
-    #     accept_item.remove("PARM")
-    #     # Collect data in one time_unit
-    #     time_last = 0
-    #
-    #     while True:
-    #         # Lode the BIN file
-    #         time.sleep(0.1)
-    #         logging.info(f"Time_last : {time_last}")
-    #         flight_log = mavutil.mavlink_connection(self.log_file, zero_time_base=time_last)
-    #         # Loop to read status
-    #         while True:
-    #             if not self.send_msg_queue.empty():
-    #                 notify = self.send_msg_queue.get()
-    #                 logging.info(f"Notify get : {notify}")
-    #                 if notify == "break":
-    #                     print(f"self.read_finish : {self.read_finish}")
-    #                     while not self.recv_msg_queue.empty():
-    #                         time_last = self.recv_msg_queue.get()["TimeS"]
-    #                     break
-    #
-    #             msg = flight_log.recv_match(type=accept_item, blocking=True)
-    #             if msg is None:
-    #                 continue
-    #             else:
-    #                 if msg.get_type() in ['ATT', 'RATE']:
-    #                     data = FixMavlink.log_extract_apm(msg)
-    #                 elif msg.get_type() in ['IMU', 'MAG'] and msg.I == 0:
-    #                     data = FixMavlink.log_extract_apm(msg)
-    #                 elif msg.get_type() == 'VIBE' and msg.IMU == 0:
-    #                     data = FixMavlink.log_extract_apm(msg)
-    #                 # Callback to main thread to predict status
-    #                 self.recv_msg_queue.put(data)
-
 
 class CollectMavlinkPX4(DroneMavlink):
     """
@@ -908,78 +850,24 @@ class CollectMavlinkPX4(DroneMavlink):
 
         logging.info('Arm and start.')
 
-    # PX4
-    @staticmethod
-    def extract_from_ulog(log_file):
-        """
-        extract and convert ulog file to csv
-        :param log_path:
-        :return:
-        """
-        # load ulog
-        ulog = ULog(log_file)
-        att = pd.DataFrame(ulog.get_dataset('vehicle_attitude_setpoint').data)
-        rate = pd.DataFrame(ulog.get_dataset('vehicle_rates_setpoint').data)
-        acc = pd.DataFrame(ulog.get_dataset('vehicle_acceleration').data)
-
-        # 给标记
-        att = att[['timestamp', 'roll_body', 'pitch_body', 'yaw_body']]
-        att['label'] = np.zeros(len(att))
-        rate = rate[['timestamp', 'roll', 'pitch', 'yaw']]
-        rate['label'] = np.zeros(len(rate)) + 1
-        acc = acc[['timestamp', 'xyz[0]', 'xyz[1]', 'xyz[2]']]
-        acc['label'] = np.zeros(len(acc)) + 2
-
-        # 合并到一个表中
-        array = att.append(rate, ignore_index=True)
-        array = array.append(acc, ignore_index=True)
-        array = array.sort_values(by='timestamp').reset_index(drop=True)
-
-        # 找出重复的index
-        pre = array['label'].to_numpy()[:-1]
-        next = array['label'].to_numpy()[1:]
-        # 去重
-        array = array.iloc[:-1][(pre - next) != 0]
-        label = array['label'].to_numpy()
-
-        data = []
-        for i in range(len(label) - 2):
-            if label[i:i + 3].sum() == 3:
-                out = CollectMavlinkAPM.log_extract_px4(array.iloc[i:i + 3])
-                data.append(out)
-        data = pd.DataFrame(data, columns=['timestamp', 'xyz[0]', 'xyz[1]', 'xyz[2]',
-                                           'roll_body', 'pitch_body', 'pitch_body',
-                                           'roll', 'pitch', 'yaw'])
-        data.rename(columns={
-            'timestamp': 'TimeS',
-            'xyz[0]': 'AccX',
-            'xyz[1]': 'AccY',
-            'xyz[2]': 'AccZ',
-            'roll_body': 'Roll',
-            'pitch_body': 'Pitch',
-            'yaw_body': 'Yaw',
-            'roll': 'RateRoll',
-            'pitch': 'RatePitch',
-            'yaw': 'RateYaw',
-        }, inplace=True)
-        return data
-
     def wait_complete(self, remain_fail=False, timeout=60 * 5):
         if not self._master:
             raise ValueError('Connect at first!')
         try:
             timeout_start = time.time()
             while time.time() < timeout_start + timeout:
-
+                # PX4 needs manual send the heartbeat of GCS
+                if toolConfig.MODE == "PX4":
+                    self._master.mav.heartbeat_send(mavutil.mavlink.MAV_TYPE_GCS,
+                                                    mavutil.mavlink.MAV_AUTOPILOT_INVALID, 0, 0, 0)
                 message = self._master.recv_match(type=['STATUSTEXT'], blocking=False, timeout=30)
                 if message is None:
                     continue
-                print(message)
                 message = message.to_dict()
                 out_msg = "None"
                 line = message['text']
                 if message["severity"] == 6:
-                    if "Land" in line:
+                    if "landed" in line:
                         # if successful landed, break the loop and return true
                         logging.info(f"Successful break the loop.")
                         return True
@@ -1011,5 +899,97 @@ class CollectMavlinkPX4(DroneMavlink):
         #     return False
         # return False
 
-    # def run(self) -> None:
-    #     self._
+    @staticmethod
+    def fill_and_process_pd_log(pd_array: pd.DataFrame):
+        # Round TimesS
+        pd_array["TimeS"] = pd_array["TimeS"] / 1000000
+        pd_array['TimeS'] = pd_array['TimeS'].round(1)
+
+        pd_array = pd_array.drop_duplicates(keep='first')
+
+        # merge data in same TimeS
+        df_array = pd.DataFrame(columns=pd_array.columns)
+
+        for group, group_item in pd_array.groupby('TimeS'):
+            # fillna
+            group_item = group_item.fillna(method='ffill')
+            group_item = group_item.fillna(method='bfill')
+            df_array.loc[len(df_array.index)] = group_item.mean()
+        # Drop nan
+        df_array = df_array.fillna(method='ffill')
+        df_array = df_array.dropna()
+
+        return df_array
+
+    @staticmethod
+    def extract_log_file(log_file):
+        """
+        extract log message form a bin file.
+        :param log_file:
+        :return:
+        """
+        accept_item = toolConfig.LOG_MAP
+
+        ulog = ULog(log_file)
+
+        att = pd.DataFrame(ulog.get_dataset('vehicle_attitude_setpoint').data)[["timestamp",
+                                                                               "roll_body", "pitch_body", "yaw_body"]]
+        rate = pd.DataFrame(ulog.get_dataset('vehicle_rates_setpoint').data)[["timestamp",
+                                                                             "roll", "pitch", "yaw"]]
+        acc_gyr = pd.DataFrame(ulog.get_dataset('sensor_combined').data)[["timestamp",
+                                                                          "gyro_rad[0]", "gyro_rad[1]", "gyro_rad[2]",
+                                                                          "accelerometer_m_s2[0]",
+                                                                          "accelerometer_m_s2[1]",
+                                                                          "accelerometer_m_s2[2]"]]
+        mag = pd.DataFrame(ulog.get_dataset('sensor_mag').data)[["timestamp", "x", "y", "z"]]
+        vibe = pd.DataFrame(ulog.get_dataset('sensor_accel').data)[["timestamp", "x", "y", "z"]]
+        param = pd.Series(ulog.initial_parameters)
+        # select parameters
+        param = param[toolConfig.PARAM]
+
+        att.columns = ["TimeS", "Roll", "Pitch", "Yaw"]
+        rate.columns = ["TimeS", "RateRoll", "RatePitch", "RateYaw"]
+        acc_gyr.columns = ["TimeS", "GyrX", "GyrY", "GyrZ", "AccX", "AccY", "AccZ"]
+        mag.columns = ["TimeS", "MagX", "MagY", "MagZ"]
+        vibe.columns = ["TimeS", "VibeX", "VibeY", "VibeZ"]
+        # Merge values
+        pd_array = pd.concat([att, rate, acc_gyr, mag, vibe]).sort_values(by='TimeS')
+
+        # Process
+        df_array = CollectMavlinkPX4.fill_and_process_pd_log(pd_array)
+        # Add parameters
+        param_values = np.repeat(param.values, df_array.shape[0]).reshape(df_array.shape[0], -1)
+        df_array[toolConfig.PARAM] = param_values
+
+        # Sort
+        order_name = toolConfig.STATUS_ORDER.copy()
+        param_seq = load_param().columns.to_list()
+        param_name = df_array.keys().difference(order_name).to_list()
+        param_name.sort(key=lambda item: param_seq.index(item))
+
+        return df_array
+
+    @staticmethod
+    @ray.remote
+    def extract_log_path_threat(log_path, file_list, skip):
+        for file in tqdm(file_list):
+            name, _ = file.split('.')
+            if skip and os.path.exists(f'{log_path}/csv/{name}.csv'):
+                continue
+            try:
+                csv_data = CollectMavlinkPX4.extract_log_file(log_path + f'/{file}')
+                csv_data.to_csv(f'{log_path}/csv/{name}.csv', index=False)
+            except Exception as e:
+                logging.warning(f"Error processing {file} : {e}")
+                continue
+        return True
+
+    @classmethod
+    def delete_current_log(cls):
+        log_path = f"{toolConfig.PX4_LOG_PATH}/"
+
+        list_of_files = glob.glob(log_path) # * means all if need specific format then *.csv
+        latest_file = max(list_of_files, key=os.path.getctime)
+        # Remove file
+        if os.path.exists(latest_file):
+            os.remove(latest_file)

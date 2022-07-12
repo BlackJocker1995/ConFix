@@ -1,13 +1,6 @@
 from Cptool.config import ToolConfig, toolConfig
 
 modelConfig = ToolConfig()
-# SITL Type PX4 and Ardupilot
-# {'PX4','Ardupilot'}
-# SITL类型 PX4 和 Ardupilot
-modelConfig.MODE = 'Ardupilot'
-
-# 是否输出Debug信息
-modelConfig.DEBUG = False
 
 # Status 长度
 modelConfig.STATUS_LEN = len(toolConfig.STATUS_ORDER) - 1

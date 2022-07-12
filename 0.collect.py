@@ -36,12 +36,12 @@ if __name__ == '__main__':
 
         manager.start_sitl()
 
-        manager.mav_monitor_init(CollectMavlinkPX4)
+        manager.mav_monitor_init(CollectMavlinkAPM)
 
         manager.mav_monitor.set_mission('Cptool/mission.txt', True)
 
         # manager.mav_monitor.set_random_param_and_start()
-        # manager.mav_monitor.start_mission()
+        manager.mav_monitor.start_mission()
 
         # manager.start_mav_monitor()
 
@@ -53,4 +53,4 @@ if __name__ == '__main__':
 
         if not result:
             # Delete current log
-            DroneMavlink.delete_current_log()
+            CollectMavlinkAPM.delete_current_log()

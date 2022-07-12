@@ -1,9 +1,41 @@
+import time
+
+
 class ToolConfig:
     class ConstError(PermissionError):
         pass
 
     class ConstCaseError(ConstError):
         pass
+
+    def __init__(self):
+        # Mode
+        # {'PX4','Ardupilot'}
+        self.__dict__["MODE"] = None
+
+
+        # Simulation Speed
+        self.__dict__["SPEED"] = 3
+        # Flight home (None, AVC_plane)
+        self.__dict__["HOME"] = None # "AVC_plane"
+        # Output Debug Message
+        self.__dict__["DEBUG"] = True
+        # Wind Speed range
+        self.__dict__["WIND_RANGE"] = [8, 10.7]
+        # Airsim Windows size
+        self.__dict__["HEIGHT"] = 640
+        self.__dict__["WEIGHT"] = 480
+        # Mission flight attitude range
+        self.__dict__["LIMIT_H"] = 50
+        self.__dict__["LIMIT_L"] = 40
+        # Copter LOG Path
+        self.__dict__["ARDUPILOT_LOG_PATH"] = '/media/rain/data'
+
+        # Airsim
+        self.__dict__["AIRSIM_PATH"] = "/media/rain/data/airsim/Africa_Savannah/LinuxNoEditor/Africa_001.sh"
+        # self.__dict__["AIRSIM_PATH"] = "/media/rain/data/airsim/Blocks/LinuxNoEditor/Blocks.sh"
+        # PX4 LOG Path
+        self.__dict__["PX4_RUN_PATH"] = '/home/rain/PX4-Autopilot'
 
     def __setattr__(self, name, value):
         if name in self.__dict__:
@@ -12,57 +44,79 @@ class ToolConfig:
             raise self.ConstCaseError('const name "%s" is not all uppercase' % name)
         self.__dict__[name] = value
 
+    def __getattr__(self, item):
+        if self.__dict__["MODE"] is None:
+            raise ValueError("Set config Mode at first!")
+        return self.__dict__[item]
 
-toolConfig = ToolConfig()
-# SITL Type PX4 and Ardupilot
-# {'PX4','Ardupilot'}
-toolConfig.MODE = "PX4"  # "PX4" #
-# Simulation Type
-# Ardupilot : ['Airsim', 'Morse', 'Gazebo', 'SITL']
-# PX4 : ['Jmavsim']
-toolConfig.SIM = "Jmavsim"  # "Jmavsim"
-# Simulation Speed
-toolConfig.SPEED = 3
-# Flight home (None, AVC_plane)
-toolConfig.HOME = None # "AVC_plane"
-# Output Debug Message
-toolConfig.DEBUG = True
-# Wind Speed range
-toolConfig.WIND_RANGE = [8, 10.7]
-# GUI Windows size
-toolConfig.HEIGHT = 640
-toolConfig.WEIGHT = 480
-# Mission flight attitude range
-toolConfig.LIMIT_H = 50
-toolConfig.LIMIT_L = 40
-# Copter LOG Path
-toolConfig.ARDUPILOT_LOG_PATH = '/media/rain/data'
-# Airsim
-toolConfig.AIRSIM_PATH = "/media/rain/data/airsim/Africa_Savannah/LinuxNoEditor/Africa_001.sh"
-# toolConfig.AIRSIM_PATH = "/media/rain/data/airsim/Blocks/LinuxNoEditor/Blocks.sh"
-# PX4 LOG Path
-toolConfig.PX4_LOG_PATH = '/home/rain/PX4-Autopilot'
-if toolConfig.MODE == "Ardupilot":
-    # Mavlink Part
-    toolConfig.LOG_MAP = ['IMU', 'ATT', 'RATE', 'PARM', 'VIBE', "MAG"]  # "POS"
-    # Online Mavlink Part
-    toolConfig.OL_LOG_MAP = ['ATTITUDE', 'RAW_IMU', 'VIBRATION']  # 'GLOBAL_POSITION_INT'
-    # Status Order
-    toolConfig.STATUS_ORDER = ['TimeS', 'Roll', 'Pitch', 'Yaw', 'RateRoll', 'RatePitch', 'RateYaw',
+    def select_mode(self, mode):
+        if mode not in ["Ardupilot", "PX4"]:
+            raise ValueError("Bad mode")
+        # Change Mode
+        self.__dict__["MODE"] = mode
+
+        if mode == "Ardupilot":
+            # Simulation Type
+            # Ardupilot : ['Airsim', 'Morse', 'Gazebo', 'SITL']
+            self.__dict__["SIM"] = "SITL"  # "Jmavsim"
+
+            # Mavlink Part
+            self.__dict__["LOG_MAP"] = ['IMU', 'ATT', 'RATE', 'PARM', 'VIBE', "MAG"]  # "POS"
+            # Online Mavlink Part
+            self.__dict__["OL_LOG_MAP"] = ['ATTITUDE', 'RAW_IMU', 'VIBRATION']  # 'GLOBAL_POSITION_INT'
+            # Status Order
+            self.__dict__["STATUS_ORDER"] = ['TimeS', 'Roll', 'Pitch', 'Yaw', 'RateRoll', 'RatePitch', 'RateYaw',
                                # 'Lat', 'Lng', 'Alt',
                                'AccX', 'AccY', 'AccZ', 'GyrX', 'GyrY', 'GyrZ',
                                'MagX', 'MagY', 'MagZ', 'VibeX', 'VibeY', 'VibeZ']
-elif toolConfig.MODE == "PX4":
-    # TODO: px4 data
-    # Mavlink Part
-    toolConfig.LOG_MAP = ['IMU', 'ATT', 'RATE', 'PARM', 'VIBE', 'POS', "MAG"]
-    # Online Mavlink Part
-    toolConfig.OL_LOG_MAP = ['ATTITUDE', 'RAW_IMU', 'GLOBAL_POSITION_INT', 'VIBRATION']
-    # Status Order
-    toolConfig.STATUS_ORDER = ['TimeS', 'Roll', 'Pitch', 'Yaw', 'RateRoll', 'RatePitch', 'RateYaw',
+
+            self.__dict__["PARAM"] = [
+                "PSC_VELXY_P",
+                "PSC_VELXY_I",
+                "PSC_VELXY_D",
+                "PSC_ACCZ_P",
+                "PSC_ACCZ_I",
+                "ATC_ANG_RLL_P",
+                "ATC_RAT_RLL_P",
+                "ATC_RAT_RLL_I",
+                "ATC_RAT_RLL_D",
+                "ATC_ANG_PIT_P",
+                "ATC_RAT_PIT_P",
+                "ATC_RAT_PIT_I",
+                "ATC_RAT_PIT_D",
+                "ATC_ANG_YAW_P",
+                "ATC_RAT_YAW_P",
+                "ATC_RAT_YAW_I",
+                "ATC_RAT_YAW_D",
+                "WPNAV_SPEED",
+                "WPNAV_ACCEL",
+                "ANGLE_MAX"
+            ]
+
+        elif mode == "PX4":
+            # PX4 : ['Jmavsim']
+            self.__dict__["SIM"] = "Jmavsim"  # "Jmavsim"
+
+            now = time.localtime()
+            now_time = time.strftime("%Y-%m-%d", now)
+            # File path
+            self.__dict__["PX4_LOG_PATH"] = f"/home/rain/PX4-Autopilot/build/px4_sitl_default/logs/{now_time}"
+            # Status Order
+            self.__dict__["STATUS_ORDER"] = ['TimeS', 'Roll', 'Pitch', 'Yaw', 'RateRoll', 'RatePitch', 'RateYaw',
                                'Lat', 'Lng', 'Alt',
                                'AccX', 'AccY', 'AccZ', 'GyrX', 'GyrY', 'GyrZ',
                                'MagX', 'MagY', 'MagZ', 'VibeX', 'VibeY', 'VibeZ']
+
+            # TODO: px4 data
+            self.__dict__["PARAM"] = [
+                "MC_PITCH_P"
+            ]
+
+
+toolConfig = ToolConfig()
+toolConfig.select_mode("Ardupilot")
+
+
 # LOG_MAP = ['ATT', 'RATE']
 # toolConfig.PARAM = [
 #     "PSC_POSXY_P",
@@ -86,27 +140,4 @@ elif toolConfig.MODE == "PX4":
 #     "WPNAV_ACCEL",
 #     "ANGLE_MAX",
 # ]
-toolConfig.PARAM = [
-        "PSC_VELXY_P",
-        "PSC_VELXY_I",
-        "PSC_VELXY_D",
-        "PSC_ACCZ_P",
-        "PSC_ACCZ_I",
-        "ATC_ANG_RLL_P",
-        "ATC_RAT_RLL_P",
-        "ATC_RAT_RLL_I",
-        "ATC_RAT_RLL_D",
-        "ATC_ANG_PIT_P",
-        "ATC_RAT_PIT_P",
-        "ATC_RAT_PIT_I",
-        "ATC_RAT_PIT_D",
-        "ATC_ANG_YAW_P",
-        "ATC_RAT_YAW_P",
-        "ATC_RAT_YAW_I",
-        "ATC_RAT_YAW_D",
-        "WPNAV_SPEED",
-        "WPNAV_ACCEL",
-        "ANGLE_MAX"
-]
-# LOG_MAP = ['ATT', 'RATE']
-toolConfig.INPUT_LEN = 3
+

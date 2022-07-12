@@ -57,10 +57,13 @@ class SimManager:
         启动软件在环 模拟器，分为PX4 和 Ardupilot
         :return:
         """
-        if os.path.exists(f"{toolConfig.ARDUPILOT_LOG_PATH}/eeprom.bin"):
+        if os.path.exists(f"{toolConfig.ARDUPILOT_LOG_PATH}/eeprom.bin") and toolConfig.MODE == "Ardupilot":
             os.remove(f"{toolConfig.ARDUPILOT_LOG_PATH}/eeprom.bin")
-        if os.path.exists(f"{toolConfig.ARDUPILOT_LOG_PATH}/mav.parm"):
+        if os.path.exists(f"{toolConfig.ARDUPILOT_LOG_PATH}/mav.parm") and toolConfig.MODE == "Ardupilot":
             os.remove(f"{toolConfig.ARDUPILOT_LOG_PATH}/mav.parm")
+        if os.path.exists(f"{toolConfig.PX4_RUN_PATH}/build/px4_sitl_default/tmp/rootfs/eeprom/parameters_10016") \
+                and toolConfig.MODE == "PX4":
+            os.remove(f"{toolConfig.PX4_RUN_PATH}/build/px4_sitl_default/tmp/rootfs/eeprom/parameters_10016")
 
         cmd = None
         if toolConfig.MODE == 'Ardupilot':
@@ -90,15 +93,19 @@ class SimManager:
             self._sitl_task = pexpect.spawn(cmd, cwd=toolConfig.ARDUPILOT_LOG_PATH, timeout=30, encoding='utf-8')
 
         if toolConfig.MODE == 'PX4':
-            pre_argv = f"PX4_HOME_LAT=-35.362758 "\
-                        f"PX4_HOME_LON=149.165135 "\
-                        f"PX4_HOME_ALT=583.730592 "\
-                        f"PX4_SIM_SPEED_FACTOR={toolConfig.SPEED}"
-            # for arg in pre_argv:
-            #     os.system(arg)
-            #     time.sleep(0.3)
+            if toolConfig.HOME is None:
+                pre_argv = f"PX4_HOME_LAT=-35.362758 " \
+                           f"PX4_HOME_LON=149.165135 " \
+                           f"PX4_HOME_ALT=583.730592 " \
+                           f"PX4_SIM_SPEED_FACTOR={toolConfig.SPEED}"
+            else:
+                pre_argv = f"PX4_HOME_LAT=40.072842 " \
+                           f"PX4_HOME_LON=-105.230575 " \
+                           f"PX4_HOME_ALT=0.000000 " \
+                           f"PX4_SIM_SPEED_FACTOR={toolConfig.SPEED}"
+
             if toolConfig.SIM == 'Airsim':
-                cmd = f'make px4_sitl_default none_iris'
+                cmd = f'make {pre_argv} px4_sitl_default none_iris'
             if toolConfig.SIM == 'Jmavsim':
                 cmd = f'make {pre_argv} px4_sitl_default jmavsim'
 

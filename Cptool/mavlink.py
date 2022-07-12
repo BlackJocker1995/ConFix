@@ -206,16 +206,28 @@ class DroneMavlink(multiprocessing.Process):
         self.start_mission()
 
     def px4_set_home(self):
-        self._master.mav.command_long_send(self._master.target_system, self._master.target_component,
-                                           mavutil.mavlink.MAV_CMD_DO_SET_HOME,
-                                           1,
-                                           0,
-                                           0,
-                                           0,
-                                           0,
-                                           -35.362758,
-                                           149.165135,
-                                           583.730592)
+        if toolConfig.HOME is None:
+            self._master.mav.command_long_send(self._master.target_system, self._master.target_component,
+                                               mavutil.mavlink.MAV_CMD_DO_SET_HOME,
+                                               1,
+                                               0,
+                                               0,
+                                               0,
+                                               0,
+                                               -35.362758,
+                                               149.165135,
+                                               583.730592)
+        else:
+            self._master.mav.command_long_send(self._master.target_system, self._master.target_component,
+                                               mavutil.mavlink.MAV_CMD_DO_SET_HOME,
+                                               1,
+                                               0,
+                                               0,
+                                               0,
+                                               0,
+                                               40.072842,
+                                               -105.230575,
+                                               0.000000)
         msg = self._master.recv_match(type=['COMMAND_ACK'], blocking=True, timeout=30)
         logging.debug(f"Home set callback: {msg.command}")
 
@@ -933,9 +945,9 @@ class CollectMavlinkPX4(DroneMavlink):
         ulog = ULog(log_file)
 
         att = pd.DataFrame(ulog.get_dataset('vehicle_attitude_setpoint').data)[["timestamp",
-                                                                               "roll_body", "pitch_body", "yaw_body"]]
+                                                                                "roll_body", "pitch_body", "yaw_body"]]
         rate = pd.DataFrame(ulog.get_dataset('vehicle_rates_setpoint').data)[["timestamp",
-                                                                             "roll", "pitch", "yaw"]]
+                                                                              "roll", "pitch", "yaw"]]
         acc_gyr = pd.DataFrame(ulog.get_dataset('sensor_combined').data)[["timestamp",
                                                                           "gyro_rad[0]", "gyro_rad[1]", "gyro_rad[2]",
                                                                           "accelerometer_m_s2[0]",
@@ -986,9 +998,9 @@ class CollectMavlinkPX4(DroneMavlink):
 
     @classmethod
     def delete_current_log(cls):
-        log_path = f"{toolConfig.PX4_LOG_PATH}/"
+        log_path = f"{toolConfig.PX4_LOG_PATH}/*.ulg"
 
-        list_of_files = glob.glob(log_path) # * means all if need specific format then *.csv
+        list_of_files = glob.glob(log_path)  # * means all if need specific format then *.csv
         latest_file = max(list_of_files, key=os.path.getctime)
         # Remove file
         if os.path.exists(latest_file):

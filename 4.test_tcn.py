@@ -1,5 +1,6 @@
 import pandas as pd
 
+from Cptool.config import toolConfig
 from ModelFit.approximate import CyTCN
 
 """

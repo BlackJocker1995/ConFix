@@ -14,7 +14,7 @@ class ToolConfig:
         self.__dict__["MODE"] = None
 
         # Simulation Speed
-        self.__dict__["SPEED"] = 3
+        self.__dict__["SPEED"] = 1
         # Flight home (None, AVC_plane)
         self.__dict__["HOME"] = None # "AVC_plane"
         # Output Debug Message
@@ -34,7 +34,7 @@ class ToolConfig:
         self.__dict__["AIRSIM_PATH"] = "/media/rain/data/airsim/Africa_Savannah/LinuxNoEditor/Africa_001.sh"
         # self.__dict__["AIRSIM_PATH"] = "/media/rain/data/airsim/Blocks/LinuxNoEditor/Blocks.sh"
         # PX4 LOG Path
-        self.__dict__["PX4_RUN_PATH"] = '/home/rain/PX4-Autopilot'
+        self.__dict__["PX4_RUN_PATH"] = '/home/rain/PX4-Autopilot_wy'
 
     def __setattr__(self, name, value):
         if name in self.__dict__:
@@ -99,10 +99,9 @@ class ToolConfig:
             now = time.localtime()
             now_time = time.strftime("%Y-%m-%d", now)
             # File path
-            self.__dict__["PX4_LOG_PATH"] = f"/home/rain/PX4-Autopilot/build/px4_sitl_default/logs/{now_time}"
+            self.__dict__["PX4_LOG_PATH"] = f"{self.__dict__['PX4_RUN_PATH']}/build/px4_sitl_default/logs/{now_time}"
             # Status Order
             self.__dict__["STATUS_ORDER"] = ['TimeS', 'Roll', 'Pitch', 'Yaw', 'RateRoll', 'RatePitch', 'RateYaw',
-                               'Lat', 'Lng', 'Alt',
                                'AccX', 'AccY', 'AccZ', 'GyrX', 'GyrY', 'GyrZ',
                                'MagX', 'MagY', 'MagZ', 'VibeX', 'VibeY', 'VibeZ']
 
@@ -128,6 +127,36 @@ class ToolConfig:
                     "MPC_Z_VEL_MAX_UP",
                     "MPC_TKO_SPEED"
             ]
+
+        ######################
+        # Model Config       #
+        ######################
+        # Status 长度
+        self.__dict__["STATUS_LEN"] = len(self.__dict__["STATUS_ORDER"]) - 1
+
+        # Parameter的长度
+        self.__dict__["PARAM_LEN"] = len(self.__dict__["PARAM"])
+
+        # MODEL的输入长度
+        self.__dict__["INPUT_LEN"] = 4
+
+        # MODEL的输出长度
+        self.__dict__["OUTPUT_LEN"] = 1
+
+        # 每一个input数据的长度
+        self.__dict__["DATA_LEN"] = self.__dict__["STATUS_LEN"] + len(toolConfig.PARAM)
+
+        # 输入的数据长度
+        self.__dict__["INPUT_DATA_LEN"] = self.__dict__["DATA_LEN"] * self.__dict__["INPUT_LEN"]
+
+        # 输出的数据长度
+        self.__dict__["OUTPUT_DATA_LEN"] = self.__dict__["STATUS_LEN"] * self.__dict__["OUTPUT_LEN"]
+
+        # 每一个片段的大小
+        self.__dict__["SEGMENT_LEN"] = 6
+
+        # 是否还原
+        self.__dict__["RETRANS"] = True
 
 
 toolConfig = ToolConfig()

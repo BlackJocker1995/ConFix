@@ -20,7 +20,7 @@ from tensorflow.python.keras.models import load_model
 from tqdm import tqdm
 
 from Cptool.config import toolConfig
-from ModelFit.config import modelConfig
+from Cptool.mavtool import min_max_scaler_param, min_max_scaler
 
 
 class Modeling(object):
@@ -29,7 +29,7 @@ class Modeling(object):
         self.trans: MinMaxScaler = None
         self._uav_class = toolConfig.MODE
         self._resize = resize
-        self.in_out = f"{modelConfig.INPUT_LEN}_{modelConfig.OUTPUT_LEN}"
+        self.in_out = f"{toolConfig.INPUT_LEN}_{toolConfig.OUTPUT_LEN}"
         if debug:
             logging.basicConfig(format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s',
                                 level=logging.DEBUG)
@@ -43,16 +43,16 @@ class Modeling(object):
         values = values.astype('float32')
 
         # normalize features
-        if modelConfig.RETRANS:
+        if toolConfig.RETRANS:
             if self.trans is None:
                 self.trans = self.load_trans()
-            values = self.trans.transform(values)
+            values = min_max_scaler(self.trans, values)
 
         # frame as supervised learning
-        reframed = self._series_to_supervised(values, modelConfig.INPUT_LEN, modelConfig.OUTPUT_LEN, True)
+        reframed = self._series_to_supervised(values, toolConfig.INPUT_LEN, toolConfig.OUTPUT_LEN, True)
 
-        if not os.path.exists('model/{}/{}_{}'.format(self._uav_class, modelConfig.INPUT_LEN, modelConfig.OUTPUT_LEN)):
-            os.makedirs('model/{}/{}_{}'.format(self._uav_class, modelConfig.INPUT_LEN, modelConfig.OUTPUT_LEN))
+        if not os.path.exists('model/{}/{}_{}'.format(self._uav_class, toolConfig.INPUT_LEN, toolConfig.OUTPUT_LEN)):
+            os.makedirs('model/{}/{}_{}'.format(self._uav_class, toolConfig.INPUT_LEN, toolConfig.OUTPUT_LEN))
 
         return reframed
 
@@ -157,16 +157,10 @@ class Modeling(object):
 
         predict_X = self._model.predict(values)
         # data retrans
-        if modelConfig.RETRANS:
+        if toolConfig.RETRANS:
             trans = self.load_trans()
-            # tmp param values
-            tmp_param = values[0, 0][-modelConfig.PARAM_LEN:]
-            # merge
-            predict_X = np.c_[predict_X, np.tile(tmp_param, (predict_X.shape[0], 1))]
             # trans
             predict_X = trans.inverse_transform(predict_X)
-            # drop param value
-            predict_X = predict_X[:, :-modelConfig.PARAM_LEN]
 
         return predict_X
 
@@ -294,7 +288,7 @@ class Modeling(object):
             plt.margins(0, 0)
             plt.gcf().subplots_adjust(bottom=0.12)
             plt.savefig(
-                f'{os.getcwd()}/fig/{modelConfig.MODE}/{modelConfig.INPUT_LEN}/{cmp_name}/{name.lower()}.{exec}',
+                f'{os.getcwd()}/fig/{toolConfig.MODE}/{toolConfig.INPUT_LEN}/{cmp_name}/{name.lower()}.{exec}',
                 dpi=300)
             # plt.show()
             plt.clf()
@@ -363,9 +357,12 @@ class Modeling(object):
     @staticmethod
     def fit_trans(pd_csv):
         values = pd_csv.values
+
+        status_value = values[:, :toolConfig.STATUS_LEN]
+
         # fit
         trans = MinMaxScaler(feature_range=(0, 1))
-        trans.fit(values)
+        trans.fit(status_value)
         # save
         if not os.path.exists(f"model/{toolConfig.MODE}"):
             os.makedirs(f"model/{toolConfig.MODE}")
@@ -393,7 +390,7 @@ class Modeling(object):
         df = pd.DataFrame(data)
         cols, names = list(), list()
         # input sequence (t-n, ... t-1)
-        for i in range(modelConfig.INPUT_LEN - 1, -1, -1):
+        for i in range(toolConfig.INPUT_LEN - 1, -1, -1):
             cols.append(df.shift(i))
 
         # put it all together
@@ -401,7 +398,7 @@ class Modeling(object):
         # drop rows with NaN values
         if dropnan:
             agg.dropna(inplace=True)
-        return agg.to_numpy().reshape((-1, modelConfig.INPUT_LEN, modelConfig.DATA_LEN))
+        return agg.to_numpy().reshape((-1, toolConfig.INPUT_LEN, toolConfig.DATA_LEN))
 
     @classmethod
     def cal_patch_deviation(cls, predicted_data, status_data):
@@ -458,17 +455,17 @@ class CyLSTM(Modeling):
         values = values.values
 
         # split into input and outputs
-        X = values[:, :modelConfig.INPUT_DATA_LEN]
+        X = values[:, :toolConfig.INPUT_DATA_LEN]
         # cut off parameter value in y
-        y = values[:, modelConfig.INPUT_DATA_LEN:]
+        y = values[:, toolConfig.INPUT_DATA_LEN:]
         # To 3D
-        y = y.reshape((y.shape[0], modelConfig.OUTPUT_LEN, -1))
+        y = y.reshape((y.shape[0], toolConfig.OUTPUT_LEN, -1))
         # Reduce parameter length and reshape to 2D
-        Y = y[:, :, :-modelConfig.PARAM_LEN].reshape((y.shape[0], modelConfig.OUTPUT_DATA_LEN))
+        Y = y[:, :, :-toolConfig.PARAM_LEN].reshape((y.shape[0], toolConfig.OUTPUT_DATA_LEN))
 
         # reshape input to be 3D [samples, timesteps, features]
-        X = X.reshape((X.shape[0], modelConfig.INPUT_LEN, modelConfig.DATA_LEN))
-        Y = Y.reshape((Y.shape[0], modelConfig.OUTPUT_DATA_LEN))
+        X = X.reshape((X.shape[0], toolConfig.INPUT_LEN, toolConfig.DATA_LEN))
+        Y = Y.reshape((Y.shape[0], toolConfig.OUTPUT_DATA_LEN))
 
         return X, Y
 
@@ -507,7 +504,7 @@ class CyLSTM(Modeling):
         model.add(Dense(64, activation='relu'))
         model.add(Dropout(0.1))
         model.add(Dense(64, activation='relu'))
-        model.add(Dense(modelConfig.OUTPUT_DATA_LEN))
+        model.add(Dense(toolConfig.OUTPUT_DATA_LEN))
         model.compile(loss='mean_squared_error', optimizer='adam', metrics=['accuracy', 'mse'])
         model.summary()
 
@@ -546,17 +543,17 @@ class CyTCN(Modeling):
         values = value.values
 
         # split into input and outputs
-        X = values[:, :modelConfig.INPUT_DATA_LEN]
+        X = values[:, :toolConfig.INPUT_DATA_LEN]
         # cut off parameter value in y
-        y = values[:, modelConfig.INPUT_DATA_LEN:]
+        y = values[:, toolConfig.INPUT_DATA_LEN:]
         # To 3D
-        y = y.reshape((y.shape[0], modelConfig.OUTPUT_LEN, -1))
+        y = y.reshape((y.shape[0], toolConfig.OUTPUT_LEN, -1))
         # Reduce parameter length and reshape to 2D
-        Y = y[:, :, :-modelConfig.PARAM_LEN].reshape((y.shape[0], modelConfig.OUTPUT_DATA_LEN))
+        Y = y[:, :, :-toolConfig.PARAM_LEN].reshape((y.shape[0], toolConfig.OUTPUT_DATA_LEN))
 
         # reshape input to be 3D [samples, timesteps, features]
-        X = X.reshape((X.shape[0], modelConfig.INPUT_LEN, modelConfig.DATA_LEN))
-        Y = Y.reshape((Y.shape[0], 1, modelConfig.OUTPUT_DATA_LEN))
+        X = X.reshape((X.shape[0], toolConfig.INPUT_LEN, toolConfig.DATA_LEN))
+        Y = Y.reshape((Y.shape[0], 1, toolConfig.OUTPUT_DATA_LEN))
 
         return X, Y
 
@@ -595,7 +592,7 @@ class CyTCN(Modeling):
             layers=[
                 TCN(input_shape=(train_shape[1], train_shape[2])),  # output.shape = (batch, 64)
                 RepeatVector(1),  # output.shape = (batch, output_timesteps, 64)
-                Dense(modelConfig.OUTPUT_DATA_LEN)  # output.shape = (batch, output_timesteps, output_dim)
+                Dense(toolConfig.OUTPUT_DATA_LEN)  # output.shape = (batch, output_timesteps, output_dim)
             ]
         )
         model.compile(loss="mse",

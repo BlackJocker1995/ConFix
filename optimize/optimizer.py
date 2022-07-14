@@ -2,6 +2,7 @@ import geatpy as ea
 import numpy as np
 import pandas as pd
 from bayes_opt import BayesianOptimization
+from gekko import GEKKO
 from scipy.optimize import minimize
 from sko.PSO import PSO
 from Cptool.config import toolConfig
@@ -40,9 +41,9 @@ class DroneOptimizer:
         pass
 
 
-class AdamGradient(DroneOptimizer):
+class NelderGradient(DroneOptimizer):
     def __init__(self):
-        super(AdamGradient).__init__()
+        super(NelderGradient, self).__init__()
         self.problem = ProblemFunLoss()
 
     def start_optimize(self):
@@ -89,11 +90,7 @@ class PSOOptimizer(DroneOptimizer):
 
 class GAOptimizer(DroneOptimizer):
     def __init__(self):
-        super(DroneOptimizer).__init__()
-
-        self.participle_param = toolConfig.PARAM
-        para_dict = load_param()
-        self.param_choice_dict = select_sub_dict(para_dict, self.participle_param)
+        super(GAOptimizer, self).__init__()
 
         # sub 的数据
         self.step_unit = read_unit_from_dict(self.param_choice_dict)

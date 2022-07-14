@@ -60,3 +60,46 @@ def rename_bin(log_path, ranges):
     for file, num in zip(file_list, range(ranges[0], ranges[1])):
         name, _ = file.split('.')
         os.rename(f"{log_path}/{file}", f"{log_path}/{str(num).zfill(8)}.BIN")
+
+
+def min_max_scaler_param(param_value):
+    para_dict = load_param()
+    participle_param = toolConfig.PARAM
+    param_choice_dict = select_sub_dict(para_dict, participle_param)
+
+    param_bounds = read_range_from_dict(param_choice_dict)
+    lb = param_bounds[:, 0]
+    ub = param_bounds[:, 1]
+    param_value = (param_value - lb) / (ub-lb)
+    return param_value
+
+
+def return_min_max_scaler_param(param_value):
+    param = load_param()
+    param_bounds = read_range_from_dict(param)
+    lb = param_bounds[:, 0]
+    ub = param_bounds[:, 1]
+    param_value = (param_value * (ub-lb)) + lb
+    return param_value
+
+
+def min_max_scaler(trans, values):
+    status_value = values[:, :toolConfig.STATUS_LEN]
+    param_value = values[:, toolConfig.STATUS_LEN:]
+
+    param_value = min_max_scaler_param(param_value)
+
+    status_value = trans.transform(status_value)
+
+    return np.c_[status_value, param_value]
+
+
+def return_min_max_scaler(trans, values):
+    status_value = values[:, :toolConfig.STATUS_LEN]
+    param_value = values[:, toolConfig.STATUS_LEN:]
+
+    param_value = return_min_max_scaler_param(param_value)
+
+    status_value = trans.transform(status_value)
+
+    return np.c_[status_value, param_value]

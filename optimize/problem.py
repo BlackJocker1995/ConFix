@@ -6,7 +6,6 @@ import pandas as pd
 
 from Cptool.config import toolConfig
 from ModelFit.approximate import CyLSTM, CyTCN
-from ModelFit.config import modelConfig
 
 
 class Problem():
@@ -117,7 +116,7 @@ class ProblemGA(ea.Problem, Problem):
         repeat_status[toolConfig.PARAM] = repeat_param
 
         status_step = self.status_data.shape[0]
-        feature_step = self.status_data.shape[0] - modelConfig.INPUT_LEN
+        feature_step = self.status_data.shape[0] - toolConfig.INPUT_LEN
         feature = pd.DataFrame()
         for i in range(x.shape[0]):
             status_index = i * status_step

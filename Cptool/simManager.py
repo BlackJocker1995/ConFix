@@ -54,7 +54,7 @@ class SimManager:
 
     def start_sitl(self):
         """
-        启动软件在环 模拟器，分为PX4 和 Ardupilot
+        Start SITL PX4 or Ardupilot
         :return:
         """
         if os.path.exists(f"{toolConfig.ARDUPILOT_LOG_PATH}/eeprom.bin") and toolConfig.MODE == "Ardupilot":
@@ -114,6 +114,29 @@ class SimManager:
         if cmd is None:
             raise ValueError('Not support mode or simulator')
 
+    def start_multiple_sitl(self, drone_i=0):
+        """
+        start multiple simulators (not support PX4 now)
+        :param drone_i:
+        :return:
+        """
+        if os.path.exists(f"{toolConfig.ARDUPILOT_LOG_PATH}/eeprom.bin"):
+            os.remove(f"{toolConfig.ARDUPILOT_LOG_PATH}/eeprom.bin")
+        if os.path.exists(f"{toolConfig.ARDUPILOT_LOG_PATH}/mav.parm"):
+            os.remove(f"{toolConfig.ARDUPILOT_LOG_PATH}/mav.parm")
+
+        if toolConfig.HOME is not None:
+            cmd = f"python3 /home/rain/ardupilot/Tools/autotest/sim_vehicle.py --location={toolConfig.HOME} " \
+                  f"--out=127.0.0.1:1455{drone_i} --out=127.0.0.1:1454{drone_i} " \
+                  f"-v ArduCopter -w -S {toolConfig.SPEED} --instance {drone_i}"
+        else:
+            cmd = f"python3 /home/rain/ardupilot/Tools/autotest/sim_vehicle.py " \
+                  f"--out=127.0.0.1:1455{drone_i} --out=127.0.0.1:1454{drone_i} " \
+                  f"-v ArduCopter -w -S {toolConfig.SPEED} --instance {drone_i}"
+
+        self._sitl_task = (pexpect.spawn(cmd, cwd=toolConfig.ARDUPILOT_LOG_PATH, timeout=30, encoding='utf-8'))
+        logging.info(f"Start {toolConfig.MODE} --> [{toolConfig.SIM} - {drone_i}]")
+
     def sim_monitor_init(self, simulator_class):
         """
         初始化airsim监控器
@@ -122,12 +145,14 @@ class SimManager:
         self.sim_monitor = simulator_class(recv_msg_queue=self.mav_msg_queue, send_msg_queue=self.sim_msg_queue)
         time.sleep(3)
 
-    def mav_monitor_init(self, mavlink_class: DroneMavlink = DroneMavlink):
+    def mav_monitor_init(self, mavlink_class: DroneMavlink = DroneMavlink, index=0):
         """
         初始化SITL在环
         :return:
         """
-        self.mav_monitor = mavlink_class(14540, recv_msg_queue=self.sim_msg_queue, send_msg_queue=self.mav_msg_queue)
+        self.mav_monitor = mavlink_class(14540+int(index),
+                                         recv_msg_queue=self.sim_msg_queue,
+                                         send_msg_queue=self.mav_msg_queue)
         self.mav_monitor.connect()
         if toolConfig.MODE == 'Ardupilot':
             if self.mav_monitor.ready2fly():

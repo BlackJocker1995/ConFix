@@ -6,7 +6,7 @@ from gekko import GEKKO
 from scipy.optimize import minimize
 from sko.PSO import PSO
 from Cptool.config import toolConfig
-from Cptool.mavtool import load_param, select_sub_dict, read_unit_from_dict, read_range_from_dict
+from Cptool.mavtool import load_param, select_sub_dict, read_unit_from_dict, read_range_from_dict, get_default_values
 from ModelFit.approximate import CyLSTM
 from optimize.problem import Problem, ProblemFunLoss, ProblemGA
 
@@ -19,15 +19,19 @@ class DroneOptimizer:
 
         self.participle_param = toolConfig.PARAM
         para_dict = load_param()
+
+        # default value, step and boundary
         self.param_choice_dict = select_sub_dict(para_dict, self.participle_param)
-        # limitation
-        self.param_bounds = np.array([self.param_choice_dict[it]['range'] for it in list(self.param_choice_dict)])
+        self.step_unit = read_unit_from_dict(self.param_choice_dict)
+        self.default_pop = (get_default_values(self.param_choice_dict) / self.step_unit).to_numpy(dtype=int)
+        self.sub_value_range = read_range_from_dict(self.param_choice_dict)
+        # boundary limitation
 
     def set_status(self, status_data):
         current_param_value: pd.DataFrame = status_data[self.participle_param]
         current_param_value = current_param_value.drop_duplicates(keep="first")
         self.start_value = current_param_value.to_numpy()[0]
-        self.problem.init_status(status_data, self.start_value)
+        self.problem.init_status(status_data)
 
     def set_predictor(self, predictor):
         self.problem.init_predictor(predictor)
@@ -35,7 +39,7 @@ class DroneOptimizer:
     def set_bounds(self):
         # step
         step = np.array([self.param_choice_dict[it]['step'] for it in list(self.param_choice_dict)])
-        self.problem.init_bounds_and_step(self.param_bounds, step)
+        self.problem.init_step(step)
 
     def start_optimize(self):
         pass
@@ -92,22 +96,18 @@ class GAOptimizer(DroneOptimizer):
     def __init__(self):
         super(GAOptimizer, self).__init__()
 
-        # sub 的数据
-        self.step_unit = read_unit_from_dict(self.param_choice_dict)
-        sub_value_range = read_range_from_dict(self.param_choice_dict)
-
         name = 'UAVProblem'  # 初始化name（函数名称，可以随意设置）boundary
         M = 1  # 初始化M（目标维数）
         maxormins = [1]  # 初始化maxormins（目标最小最大化标记列表，1：最小化该目标；-1：最大化该目标）
-        Dim = sub_value_range.shape[0]  # 初始化Dim（决策变量维数）
+        Dim = self.sub_value_range.shape[0]  # 初始化Dim（决策变量维数）
         varTypes = [1] * Dim  # 初始化varTypes（决策变量的类型，元素为0表示对应的变量是连续的；1表示是离散的）
-        lb = sub_value_range[:, 0] // self.step_unit  # 决策变量下界
-        ub = sub_value_range[:, 1] // self.step_unit  # 决策变量上界
+        lb = self.sub_value_range[:, 0] // self.step_unit  # 决策变量下界
+        ub = self.sub_value_range[:, 1] // self.step_unit  # 决策变量上界
         lbin = [1] * Dim  # 决策变量下边界（0表示不包含该变量的下边界，1表示包含）
         ubin = [1] * Dim  # 决策变量上边界（0表示不包含该变量的上边界，1表示包含）
 
         # 调用父类构造方法完成实例化
-        self.problem = ProblemGA(name=name, M=M, maxormins=maxormins, Dim=sub_value_range[0],
+        self.problem = ProblemGA(name=name, M=M, maxormins=maxormins, Dim=self.sub_value_range.shape[0],
                                  varTypes=varTypes, lb=lb, ub=ub, lbin=lbin, ubin=ubin)
 
     def start_optimize(self):

@@ -8,24 +8,20 @@ from Cptool.config import toolConfig
 from ModelFit.approximate import CyLSTM, CyTCN
 
 
-class Problem():
+class Problem:
     def __init__(self):
         self.status_data: pd.DataFrame = None
         self.predictor: CyLSTM = None
-        self.param_bounds = None
-        self.start_value = None
         self.step = None
 
-    def init_status(self, status_data, start_value):
+    def init_status(self, status_data):
         self.status_data = status_data
-        self.start_value = start_value
 
     def init_predictor(self, predictor):
         self.predictor = predictor
         self.predictor.read_trans()
 
-    def init_bounds_and_step(self, param_bounds, step):
-        self.param_bounds = param_bounds
+    def init_step(self, step):
         # step
         self.step = step
 
@@ -69,20 +65,6 @@ class ProblemGA(ea.Problem, Problem):
                  varTypes, lb, ub, lbin, ubin):
         ea.Problem.__init__(self, name, M, maxormins, Dim,
                             varTypes, lb, ub, lbin, ubin)
-
-        self.status_data: pd.DataFrame = None
-        self.predictor: CyLSTM = None
-        self.start_value = None
-
-        self.sensor_data = None
-        self.param_data = None
-
-    def init_status(self, status_data, start_value):
-        self.status_data = status_data
-        self.start_value = start_value
-
-        self.sensor_data = status_data[toolConfig.STATUS_ORDER]
-        self.param_data = status_data[toolConfig.PARAM]
 
     def aimFunc_other(self, configuration):
         x = configuration.Phen

@@ -5,6 +5,7 @@ import logging
 import multiprocessing
 import os
 import time
+from typing import Type
 
 import pexpect
 from pexpect import spawn
@@ -145,7 +146,7 @@ class SimManager:
         self.sim_monitor = simulator_class(recv_msg_queue=self.mav_msg_queue, send_msg_queue=self.sim_msg_queue)
         time.sleep(3)
 
-    def mav_monitor_init(self, mavlink_class: DroneMavlink = DroneMavlink, index=0):
+    def mav_monitor_init(self, mavlink_class: Type[DroneMavlink] = DroneMavlink, index=0):
         """
         初始化SITL在环
         :return:

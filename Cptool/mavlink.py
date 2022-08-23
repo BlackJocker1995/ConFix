@@ -52,9 +52,6 @@ class DroneMavlink(multiprocessing.Process):
         :return:
         """
         while True:
-            if toolConfig.MODE == "PX4":
-                self._master.mav.heartbeat_send(mavutil.mavlink.MAV_TYPE_GCS,
-                                                mavutil.mavlink.MAV_AUTOPILOT_INVALID, 0, 0, 0)
             message = self._master.recv_match(type=['STATUSTEXT'], blocking=True, timeout=30)
             # message = self._master.recv_match(blocking=True, timeout=30)
             message = message.to_dict()["text"]
@@ -122,8 +119,13 @@ class DroneMavlink(multiprocessing.Process):
             raise ValueError('Connect at first!')
         # self._master.set_mode_loiter()
 
-        self._master.arducopter_arm()
-        self._master.set_mode_auto()
+        if toolConfig.MODE == "PX4":
+            self._master.set_mode_auto()
+            self._master.arducopter_arm()
+            self._master.set_mode_auto()
+        else:
+            self._master.arducopter_arm()
+            self._master.set_mode_auto()
 
         logging.info('Arm and start.')
 
@@ -237,6 +239,10 @@ class DroneMavlink(multiprocessing.Process):
                                                0.000000)
         msg = self._master.recv_match(type=['COMMAND_ACK'], blocking=True, timeout=30)
         logging.debug(f"Home set callback: {msg.command}")
+
+    def gcs_msg_request(self):
+        self._master.mav.heartbeat_send(mavutil.mavlink.MAV_TYPE_GCS,
+                                        mavutil.mavlink.MAV_AUTOPILOT_INVALID, 0, 0, 0)
 
     def wait_complete(self):
         pass
@@ -550,6 +556,179 @@ class CollectMavlinkAPM(DroneMavlink):
             return False
         return False
 
+    def run(self):
+        """
+        loop check
+        :return:
+        """
+
+        while True:
+            msg = self._master.recv_match(type=['STATUSTEXT'], blocking=False)
+            if msg is not None:
+                msg = msg.to_dict()
+                # print(msg2)
+                if msg['severity'] in [0, 2]:
+                    # self.send_msg_queue.put('crash')
+                    logging.info('ArduCopter detect Crash.')
+                    self.msg_queue.put('error')
+                    break
+
+
+class CollectMavlinkPX4(DroneMavlink):
+    """
+    Mainly responsible for initiating the communication link to interact with UAV
+    """
+
+    def __init__(self, port, recv_msg_queue, send_msg_queue):
+        super(CollectMavlinkPX4, self).__init__(port, recv_msg_queue, send_msg_queue)
+
+    def wait_complete(self, remain_fail=False, timeout=60 * 5):
+        if not self._master:
+            raise ValueError('Connect at first!')
+        try:
+            timeout_start = time.time()
+            while time.time() < timeout_start + timeout:
+                # PX4 needs manual send the heartbeat of GCS
+                if toolConfig.MODE == "PX4":
+                    self._master.mav.heartbeat_send(mavutil.mavlink.MAV_TYPE_GCS,
+                                                    mavutil.mavlink.MAV_AUTOPILOT_INVALID, 0, 0, 0)
+                message = self._master.recv_match(type=['STATUSTEXT'], blocking=False, timeout=30)
+                if message is None:
+                    continue
+                message = message.to_dict()
+                out_msg = "None"
+                line = message['text']
+                if message["severity"] == 6:
+                    if "landed" in line:
+                        # if successful landed, break the loop and return true
+                        logging.info(f"Successful break the loop.")
+                        return True
+                elif message["severity"] == 2 or message["severity"] == 0:
+                    # Appear error, break loop and return false
+                    if "SIM Hit ground at" in line:
+                        pass
+                    elif "Potential Thrust Loss" in line:
+                        pass
+                    elif "Crash" in line:
+                        pass
+                    elif "PreArm" in line:
+                        pass
+                        # will not generate log file
+                        logging.info(f"Get error with {message['text']}")
+                        return True
+                    logging.info(f"Get error with {message['text']}")
+                    if remain_fail:
+                        # Keep problem log
+                        return True
+                    else:
+                        return False
+            return False
+        except TimeoutError:
+            # Mission point time out, change other params
+            logging.warning('Wp timeout!')
+            return False
+        except KeyboardInterrupt:
+            logging.info('Key bordInterrupt! exit')
+            return False
+
+    @staticmethod
+    def fill_and_process_pd_log(pd_array: pd.DataFrame):
+        # Round TimesS
+        pd_array["TimeS"] = pd_array["TimeS"] / 1000000
+        pd_array['TimeS'] = pd_array['TimeS'].round(1)
+
+        pd_array = pd_array.drop_duplicates(keep='first')
+
+        # merge data in same TimeS
+        df_array = pd.DataFrame(columns=pd_array.columns)
+
+        for group, group_item in pd_array.groupby('TimeS'):
+            # fillna
+            group_item = group_item.fillna(method='ffill')
+            group_item = group_item.fillna(method='bfill')
+            df_array.loc[len(df_array.index)] = group_item.mean()
+        # Drop nan
+        df_array = df_array.fillna(method='ffill')
+        df_array = df_array.dropna()
+
+        return df_array
+
+    @staticmethod
+    def extract_log_file(log_file):
+        """
+        extract log message form a bin file.
+        :param log_file:
+        :return:
+        """
+
+        ulog = ULog(log_file)
+
+        att = pd.DataFrame(ulog.get_dataset('vehicle_attitude_setpoint').data)[["timestamp",
+                                                                                "roll_body", "pitch_body", "yaw_body"]]
+        rate = pd.DataFrame(ulog.get_dataset('vehicle_rates_setpoint').data)[["timestamp",
+                                                                              "roll", "pitch", "yaw"]]
+        acc_gyr = pd.DataFrame(ulog.get_dataset('sensor_combined').data)[["timestamp",
+                                                                          "gyro_rad[0]", "gyro_rad[1]", "gyro_rad[2]",
+                                                                          "accelerometer_m_s2[0]",
+                                                                          "accelerometer_m_s2[1]",
+                                                                          "accelerometer_m_s2[2]"]]
+        mag = pd.DataFrame(ulog.get_dataset('sensor_mag').data)[["timestamp", "x", "y", "z"]]
+        vibe = pd.DataFrame(ulog.get_dataset('sensor_accel').data)[["timestamp", "x", "y", "z"]]
+        # Param
+        param = pd.Series(ulog.initial_parameters)
+        param = param[toolConfig.PARAM]
+        # select parameters
+        for t, name, value in ulog.changed_parameters:
+            if name in toolConfig.PARAM:
+                param[name] = round(value, 5)
+
+        att.columns = ["TimeS", "Roll", "Pitch", "Yaw"]
+        rate.columns = ["TimeS", "RateRoll", "RatePitch", "RateYaw"]
+        acc_gyr.columns = ["TimeS", "GyrX", "GyrY", "GyrZ", "AccX", "AccY", "AccZ"]
+        mag.columns = ["TimeS", "MagX", "MagY", "MagZ"]
+        vibe.columns = ["TimeS", "VibeX", "VibeY", "VibeZ"]
+        # Merge values
+        pd_array = pd.concat([att, rate, acc_gyr, mag, vibe]).sort_values(by='TimeS')
+
+        # Process
+        df_array = CollectMavlinkPX4.fill_and_process_pd_log(pd_array)
+        # Add parameters
+        param_values = np.tile(param.values, df_array.shape[0]).reshape(df_array.shape[0], -1)
+        df_array[toolConfig.PARAM] = param_values
+
+        # Sort
+        order_name = toolConfig.STATUS_ORDER.copy()
+        param_seq = load_param().columns.to_list()
+        param_name = df_array.keys().difference(order_name).to_list()
+        param_name.sort(key=lambda item: param_seq.index(item))
+
+        return df_array
+
+    @staticmethod
+    @ray.remote
+    def extract_log_path_threat(log_path, file_list, skip):
+        for file in tqdm(file_list):
+            name, _ = file.split('.')
+            if skip and os.path.exists(f'{log_path}/csv/{name}.csv'):
+                continue
+            try:
+                csv_data = CollectMavlinkPX4.extract_log_file(log_path + f'/{file}')
+                csv_data.to_csv(f'{log_path}/csv/{name}.csv', index=False)
+            except Exception as e:
+                logging.warning(f"Error processing {file} : {e}")
+                continue
+        return True
+
+    @classmethod
+    def delete_current_log(cls):
+        log_path = f"{toolConfig.PX4_LOG_PATH}/*.ulg"
+
+        list_of_files = glob.glob(log_path)  # * means all if need specific format then *.csv
+        latest_file = max(list_of_files, key=os.path.getctime)
+        # Remove file
+        if os.path.exists(latest_file):
+            os.remove(latest_file)
+
 
 class FlyFixMavlinkAPM(DroneMavlink):
     def __init__(self, port, recv_msg_queue=None, send_msg_queue=None):
@@ -846,173 +1025,6 @@ class FlyFixMavlinkAPM(DroneMavlink):
                     time_last = msg.TimeUS
 
 
-class CollectMavlinkPX4(DroneMavlink):
-    """
-    Mainly responsible for initiating the communication link to interact with UAV
-    """
-
-    def __init__(self, port, recv_msg_queue, send_msg_queue):
-        super(CollectMavlinkPX4, self).__init__(port, recv_msg_queue, send_msg_queue)
-
-    def start_mission(self):
-        """
-        Arm and start the flight
-        :return:
-        """
-        if not self._master:
-            logging.warning('Mavlink handler is not connect!')
-            raise ValueError('Connect at first!')
-        # self._master.set_mode_loiter()
-        self._master.set_mode_auto()
-        self._master.arducopter_arm()
-        self._master.set_mode_auto()
-
-        logging.info('Arm and start.')
-
-    def wait_complete(self, remain_fail=False, timeout=60 * 5):
-        if not self._master:
-            raise ValueError('Connect at first!')
-        try:
-            timeout_start = time.time()
-            while time.time() < timeout_start + timeout:
-                # PX4 needs manual send the heartbeat of GCS
-                if toolConfig.MODE == "PX4":
-                    self._master.mav.heartbeat_send(mavutil.mavlink.MAV_TYPE_GCS,
-                                                    mavutil.mavlink.MAV_AUTOPILOT_INVALID, 0, 0, 0)
-                message = self._master.recv_match(type=['STATUSTEXT'], blocking=False, timeout=30)
-                if message is None:
-                    continue
-                message = message.to_dict()
-                out_msg = "None"
-                line = message['text']
-                if message["severity"] == 6:
-                    if "landed" in line:
-                        # if successful landed, break the loop and return true
-                        logging.info(f"Successful break the loop.")
-                        return True
-                elif message["severity"] == 2 or message["severity"] == 0:
-                    # Appear error, break loop and return false
-                    if "SIM Hit ground at" in line:
-                        pass
-                    elif "Potential Thrust Loss" in line:
-                        pass
-                    elif "Crash" in line:
-                        pass
-                    elif "PreArm" in line:
-                        pass
-                        # will not generate log file
-                        logging.info(f"Get error with {message['text']}")
-                        return True
-                    logging.info(f"Get error with {message['text']}")
-                    if remain_fail:
-                        # Keep problem log
-                        return True
-                    else:
-                        return False
-            return False
-        except TimeoutError:
-            # Mission point time out, change other params
-            logging.warning('Wp timeout!')
-            return False
-        except KeyboardInterrupt:
-            logging.info('Key bordInterrupt! exit')
-            return False
-
-    @staticmethod
-    def fill_and_process_pd_log(pd_array: pd.DataFrame):
-        # Round TimesS
-        pd_array["TimeS"] = pd_array["TimeS"] / 1000000
-        pd_array['TimeS'] = pd_array['TimeS'].round(1)
-
-        pd_array = pd_array.drop_duplicates(keep='first')
-
-        # merge data in same TimeS
-        df_array = pd.DataFrame(columns=pd_array.columns)
-
-        for group, group_item in pd_array.groupby('TimeS'):
-            # fillna
-            group_item = group_item.fillna(method='ffill')
-            group_item = group_item.fillna(method='bfill')
-            df_array.loc[len(df_array.index)] = group_item.mean()
-        # Drop nan
-        df_array = df_array.fillna(method='ffill')
-        df_array = df_array.dropna()
-
-        return df_array
-
-    @staticmethod
-    def extract_log_file(log_file):
-        """
-        extract log message form a bin file.
-        :param log_file:
-        :return:
-        """
-
-        ulog = ULog(log_file)
-
-        att = pd.DataFrame(ulog.get_dataset('vehicle_attitude_setpoint').data)[["timestamp",
-                                                                                "roll_body", "pitch_body", "yaw_body"]]
-        rate = pd.DataFrame(ulog.get_dataset('vehicle_rates_setpoint').data)[["timestamp",
-                                                                              "roll", "pitch", "yaw"]]
-        acc_gyr = pd.DataFrame(ulog.get_dataset('sensor_combined').data)[["timestamp",
-                                                                          "gyro_rad[0]", "gyro_rad[1]", "gyro_rad[2]",
-                                                                          "accelerometer_m_s2[0]",
-                                                                          "accelerometer_m_s2[1]",
-                                                                          "accelerometer_m_s2[2]"]]
-        mag = pd.DataFrame(ulog.get_dataset('sensor_mag').data)[["timestamp", "x", "y", "z"]]
-        vibe = pd.DataFrame(ulog.get_dataset('sensor_accel').data)[["timestamp", "x", "y", "z"]]
-        param = pd.Series(ulog.initial_parameters)
-        # select parameters
-        param = param[toolConfig.PARAM]
-
-        att.columns = ["TimeS", "Roll", "Pitch", "Yaw"]
-        rate.columns = ["TimeS", "RateRoll", "RatePitch", "RateYaw"]
-        acc_gyr.columns = ["TimeS", "GyrX", "GyrY", "GyrZ", "AccX", "AccY", "AccZ"]
-        mag.columns = ["TimeS", "MagX", "MagY", "MagZ"]
-        vibe.columns = ["TimeS", "VibeX", "VibeY", "VibeZ"]
-        # Merge values
-        pd_array = pd.concat([att, rate, acc_gyr, mag, vibe]).sort_values(by='TimeS')
-
-        # Process
-        df_array = CollectMavlinkPX4.fill_and_process_pd_log(pd_array)
-        # Add parameters
-        param_values = np.tile(param.values, df_array.shape[0]).reshape(df_array.shape[0], -1)
-        df_array[toolConfig.PARAM] = param_values
-
-        # Sort
-        order_name = toolConfig.STATUS_ORDER.copy()
-        param_seq = load_param().columns.to_list()
-        param_name = df_array.keys().difference(order_name).to_list()
-        param_name.sort(key=lambda item: param_seq.index(item))
-
-        return df_array
-
-    @staticmethod
-    @ray.remote
-    def extract_log_path_threat(log_path, file_list, skip):
-        for file in tqdm(file_list):
-            name, _ = file.split('.')
-            if skip and os.path.exists(f'{log_path}/csv/{name}.csv'):
-                continue
-            try:
-                csv_data = CollectMavlinkPX4.extract_log_file(log_path + f'/{file}')
-                csv_data.to_csv(f'{log_path}/csv/{name}.csv', index=False)
-            except Exception as e:
-                logging.warning(f"Error processing {file} : {e}")
-                continue
-        return True
-
-    @classmethod
-    def delete_current_log(cls):
-        log_path = f"{toolConfig.PX4_LOG_PATH}/*.ulg"
-
-        list_of_files = glob.glob(log_path)  # * means all if need specific format then *.csv
-        latest_file = max(list_of_files, key=os.path.getctime)
-        # Remove file
-        if os.path.exists(latest_file):
-            os.remove(latest_file)
-
-
 class FlyFixMavlinkPX4(DroneMavlink):
     def __init__(self, port, recv_msg_queue=None, send_msg_queue=None):
         super(FlyFixMavlinkPX4, self).__init__(port, recv_msg_queue, send_msg_queue)
@@ -1075,52 +1087,6 @@ class FlyFixMavlinkPX4(DroneMavlink):
         df_array[toolConfig.PARAM] = param_values
 
         df_array = df_array[df_array["TimeS"] < (time_last + time_unit + 0.1)]
-
-        return df_array
-
-    def read_status_patch(self, time_unit: float, status):
-        time_unit = float(time_unit)
-        out_data = []
-        first_msg = self._master.recv_match(type=status, blocking=True)
-        out_data.append(FlyFixMavlinkAPM.runtime_extract_apm(first_msg))
-        first_time = float(FlyFixMavlinkAPM.get_time_index(first_msg))
-        new_time = first_time
-
-        # Collect data in one time_unit
-        while new_time < (first_time + time_unit):
-            new_msg = self._master.recv_match(type=status, blocking=True)
-            # Add and process
-            new_time = float(FlyFixMavlinkAPM.get_time_index(new_msg))
-            out_data.append(FlyFixMavlinkAPM.runtime_extract_apm(new_msg))
-
-        # Read current configuration
-        params = self.get_params(toolConfig.PARAM)
-        out_data.append(params)
-        pd_array = pd.DataFrame(out_data)
-
-        # Remain timestamp .1 and drop duplicate
-        pd_array['TimeS'] = pd_array['TimeS'].round(1)
-        pd_array = pd_array.drop_duplicates(keep='first')
-        pd_array[toolConfig.PARAM] = pd_array[toolConfig.PARAM].fillna(method="bfill")
-
-        # merge data in same TimeS
-        df_array = pd.DataFrame(columns=pd_array.columns)
-        for group, group_item in pd_array.groupby('TimeS'):
-            # fillna
-            group_item = group_item.fillna(method='ffill')
-            group_item = group_item.fillna(method='bfill')
-            df_array.loc[len(df_array.index)] = group_item.mean()
-        # Drop nan
-        df_array = df_array.fillna(method='ffill')
-        df_array = df_array.dropna()
-        # Order
-        order_name = toolConfig.STATUS_ORDER.copy()
-        param_seq = load_param().columns.to_list()
-        param_name = df_array.keys().difference(order_name).to_list()
-        param_name.sort(key=lambda item: param_seq.index(item))
-        # Status value + Parameter name
-        order_name.extend(param_name)
-        df_array = df_array[order_name]
 
         return df_array
 
@@ -1187,40 +1153,6 @@ class FlyFixMavlinkPX4(DroneMavlink):
                 'VibeZ': msg.vibration_z
             }
         return out
-
-    def get_param_from_log(self, param):
-        self.flight_log.param_fetch_one(param)
-        while True:
-            message = self.flight_log.recv_match(type=['PARAM_VALUE', 'PARM'], blocking=True).to_dict()
-            if message['param_id'] == param:
-                logging.debug('name: %s\t value: %f' % (message['param_id'], message['param_value']))
-                break
-        return message['param_value']
-
-    def get_params_from_log(self, params):
-        out_dict = {}
-        for param in params:
-            out_dict[param] = DroneMavlink.get_param_from_log(param)
-        return out_dict
-
-    @staticmethod
-    def get_time_index(msg):
-        """
-        As different message have different time unit. It needs to convert to same second unit.
-        :return:
-        """
-        if msg.name in ["ATTITUDE"]:  # "GLOBAL_POSITION_INT"
-            return msg.time_boot_ms / 1000
-        if msg.name in ["RAW_IMU", "VIBRATION"]:
-            return msg.time_usec / 1000000
-
-    @staticmethod
-    def get_time_index_bin(msg):
-        """
-        As different message have different time unit. It needs to convert to same second unit.
-        :return:
-        """
-        return msg.TimeUS / 1000000
 
     def online_ulg_monitor(self, pitch_size_s=3):
         time_last = 0

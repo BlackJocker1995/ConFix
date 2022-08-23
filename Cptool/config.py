@@ -1,3 +1,4 @@
+# coding:utf-8
 import time
 
 
@@ -16,7 +17,7 @@ class ToolConfig:
         # Simulation Speed
         self.__dict__["SPEED"] = 3
         # Flight home (None, AVC_plane)
-        self.__dict__["HOME"] = "AVC_plane" # "AVC_plane"
+        self.__dict__["HOME"] = "AVC_plane"  # "AVC_plane"
         # Output Debug Message
         self.__dict__["DEBUG"] = True
         # Wind Speed range
@@ -34,7 +35,9 @@ class ToolConfig:
         self.__dict__["AIRSIM_PATH"] = "/media/rain/data/airsim/Africa_Savannah/LinuxNoEditor/Africa_001.sh"
         # self.__dict__["AIRSIM_PATH"] = "/media/rain/data/airsim/Blocks/LinuxNoEditor/Blocks.sh"
         # PX4 LOG Path
-        self.__dict__["PX4_RUN_PATH"] = '/home/rain/PX4-Autopilot_wy'
+        self.__dict__["PX4_RUN_PATH"] = '/home/rain/PX4-Autopilot'
+
+        self.__dict__["CLUSTER_CHOICE_NUM"] = 10
 
     def __setattr__(self, name, value):
         if name in self.__dict__:
@@ -65,9 +68,9 @@ class ToolConfig:
             self.__dict__["OL_LOG_MAP"] = ['ATTITUDE', 'RAW_IMU', 'VIBRATION']  # 'GLOBAL_POSITION_INT'
             # Status Order
             self.__dict__["STATUS_ORDER"] = ['TimeS', 'Roll', 'Pitch', 'Yaw', 'RateRoll', 'RatePitch', 'RateYaw',
-                               # 'Lat', 'Lng', 'Alt',
-                               'AccX', 'AccY', 'AccZ', 'GyrX', 'GyrY', 'GyrZ',
-                               'MagX', 'MagY', 'MagZ', 'VibeX', 'VibeY', 'VibeZ']
+                                             # 'Lat', 'Lng', 'Alt',
+                                             'AccX', 'AccY', 'AccZ', 'GyrX', 'GyrY', 'GyrZ',
+                                             'MagX', 'MagY', 'MagZ', 'VibeX', 'VibeY', 'VibeZ']
 
             self.__dict__["PARAM"] = [
                 "PSC_VELXY_P",
@@ -102,30 +105,30 @@ class ToolConfig:
             self.__dict__["PX4_LOG_PATH"] = f"{self.__dict__['PX4_RUN_PATH']}/build/px4_sitl_default/logs/{now_time}"
             # Status Order
             self.__dict__["STATUS_ORDER"] = ['TimeS', 'Roll', 'Pitch', 'Yaw', 'RateRoll', 'RatePitch', 'RateYaw',
-                               'AccX', 'AccY', 'AccZ', 'GyrX', 'GyrY', 'GyrZ',
-                               'MagX', 'MagY', 'MagZ', 'VibeX', 'VibeY', 'VibeZ']
+                                             'AccX', 'AccY', 'AccZ', 'GyrX', 'GyrY', 'GyrZ',
+                                             'MagX', 'MagY', 'MagZ', 'VibeX', 'VibeY', 'VibeZ']
 
             # TODO: px4 data
             self.__dict__["PARAM"] = [
-                    "MC_ROLL_P",
-                    "MC_PITCH_P",
-                    "MC_YAW_P",
-                    "MC_YAW_WEIGHT",
-                    "MPC_XY_P",
-                    "MPC_Z_P",
-                    "MC_PITCHRATE_P",
-                    "MC_ROLLRATE_P",
-                    #"MC_ROLLRATE_MAX",
-                    "MC_YAWRATE_P",
-                    #"MPC_THR_MIN",
-                    #"MPC_THR_MAX",
-                    "MPC_TILTMAX_AIR",
-                    "MIS_YAW_ERR",
-                    #"MPC_XY_VEL_MAX",
-                    #"MC_PITCHRATE_MAX",
-                    "MPC_Z_VEL_MAX_DN",
-                    "MPC_Z_VEL_MAX_UP",
-                    "MPC_TKO_SPEED"
+                "MC_ROLL_P",
+                "MC_PITCH_P",
+                "MC_YAW_P",
+                "MC_YAW_WEIGHT",
+                "MPC_XY_P",
+                "MPC_Z_P",
+                "MC_PITCHRATE_P",
+                "MC_ROLLRATE_P",
+                # "MC_ROLLRATE_MAX",
+                "MC_YAWRATE_P",
+                # "MPC_THR_MIN",
+                # "MPC_THR_MAX",
+                "MPC_TILTMAX_AIR",
+                "MIS_YAW_ERR",
+                # "MPC_XY_VEL_MAX",
+                # "MC_PITCHRATE_MAX",
+                "MPC_Z_VEL_MAX_DN",
+                "MPC_Z_VEL_MAX_UP",
+                "MPC_TKO_SPEED"
             ]
 
         ######################
@@ -139,7 +142,6 @@ class ToolConfig:
 
         # MODEL的输入长度
         self.__dict__["INPUT_LEN"] = 4
-
         # MODEL的输出长度
         self.__dict__["OUTPUT_LEN"] = 1
 
@@ -153,7 +155,7 @@ class ToolConfig:
         self.__dict__["OUTPUT_DATA_LEN"] = self.__dict__["STATUS_LEN"] * self.__dict__["OUTPUT_LEN"]
 
         # 每一个片段的大小
-        self.__dict__["SEGMENT_LEN"] = 6
+        self.__dict__["SEGMENT_LEN"] = 12
 
         # 是否还原
         self.__dict__["RETRANS"] = True
@@ -162,21 +164,19 @@ class ToolConfig:
 toolConfig = ToolConfig()
 toolConfig.select_mode("Ardupilot")
 
-
-# LOG_MAP = ['ATT', 'RATE']
 # toolConfig.PARAM = [
 #     "PSC_POSXY_P",
 #     "PSC_VELXY_P",
 #     "PSC_POSZ_P",
 #     "ATC_ANG_RLL_P",
+#     "ATC_ANG_PIT_P",
+#     "ATC_ANG_YAW_P",
 #     "ATC_RAT_RLL_I",
 #     "ATC_RAT_RLL_D",
 #     "ATC_RAT_RLL_P",
-#     "ATC_ANG_PIT_P",
 #     "ATC_RAT_PIT_P",
 #     "ATC_RAT_PIT_I",
 #     "ATC_RAT_PIT_D",
-#     "ATC_ANG_YAW_P",
 #     "ATC_RAT_YAW_P",
 #     "ATC_RAT_YAW_I",
 #     "ATC_RAT_YAW_D",
@@ -186,4 +186,3 @@ toolConfig.select_mode("Ardupilot")
 #     "WPNAV_ACCEL",
 #     "ANGLE_MAX",
 # ]
-

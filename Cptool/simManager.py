@@ -146,12 +146,12 @@ class SimManager:
         self.sim_monitor = simulator_class(recv_msg_queue=self.mav_msg_queue, send_msg_queue=self.sim_msg_queue)
         time.sleep(3)
 
-    def mav_monitor_init(self, mavlink_class: Type[DroneMavlink] = DroneMavlink, index=0):
+    def mav_monitor_init(self, mavlink_class: Type[DroneMavlink] = DroneMavlink, drone_i=0):
         """
         初始化SITL在环
         :return:
         """
-        self.mav_monitor = mavlink_class(14540+int(index),
+        self.mav_monitor = mavlink_class(14540+int(drone_i),
                                          recv_msg_queue=self.sim_msg_queue,
                                          send_msg_queue=self.mav_msg_queue)
         self.mav_monitor.connect()

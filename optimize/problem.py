@@ -12,6 +12,7 @@ class Problem:
     def __init__(self):
         self.status_data: pd.DataFrame = None
         self.predictor: CyLSTM = None
+        self.param_bounds = None
         self.step = None
 
     def init_status(self, status_data):

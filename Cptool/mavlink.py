@@ -324,6 +324,14 @@ class DroneMavlink(multiprocessing.Process):
                     logging.warning(f"Error processing {file} : {e}")
                     continue
 
+    def init_ulg_log_file(self):
+        log_path = f"{toolConfig.PX4_LOG_PATH}/*.ulg"
+
+        list_of_files = glob.glob(log_path)  # * means all if need specific format then *.csv
+        latest_file = max(list_of_files, key=os.path.getctime)
+        self.log_file = latest_file
+        logging.info(f"Current log file: {latest_file}")
+
 
 class CollectMavlinkAPM(DroneMavlink):
     """
@@ -730,14 +738,41 @@ class CollectMavlinkPX4(DroneMavlink):
             os.remove(latest_file)
 
 
-class FlyFixMavlinkAPM(DroneMavlink):
+class FlyFixMavlink(DroneMavlink):
     def __init__(self, port, recv_msg_queue=None, send_msg_queue=None):
-        super(FlyFixMavlinkAPM, self).__init__(port, recv_msg_queue, send_msg_queue)
-        self.predictor: CyLSTM = None
+        super(FlyFixMavlink, self).__init__(port, recv_msg_queue, send_msg_queue)
+        self.predictor = None
         self.log_file = None
         self.flight_log = None
         self.read_finish = False
         self.param_current = dict()
+
+    def init_predictor(self, model_class, epochs, batch_size):
+        self.predictor: Modeling = model_class(epochs, batch_size, toolConfig.DEBUG)
+        self.predictor.read_model()
+
+    def repair_configuration(self, status_data):
+        logging.info("Start repair with parameter")
+        start = time.time()
+        optimize = GAOptimizer()
+        optimize.set_status(status_data)
+        optimize.set_predictor(self.predictor)
+        optimize.set_bounds()
+        new_config = optimize.start_optimize()
+        end = time.time()
+        logging.info(f"Repair configuration {new_config} and cost: {end - start} second")
+        self.set_params(new_config)
+
+    def init_bin_log_file(self):
+        pass
+
+    def init_current_param(self):
+        pass
+
+
+class FlyFixMavlinkAPM(FlyFixMavlink):
+    def __init__(self, port, recv_msg_queue=None, send_msg_queue=None):
+        super(FlyFixMavlinkAPM, self).__init__(port, recv_msg_queue, send_msg_queue)
 
     def init_bin_log_file(self):
         log_index = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/LASTLOG.TXT"
@@ -758,10 +793,6 @@ class FlyFixMavlinkAPM(DroneMavlink):
                 self.param_current.update(CollectMavlinkAPM.log_extract_apm(msg))
         self.param_current.pop('TimeS')
         # logging.debug(f"Current parameters: {self.param_current}")
-
-    def init_predictor(self, model_class, epochs, batch_size):
-        self.predictor: Modeling = model_class(epochs, batch_size, toolConfig.DEBUG)
-        self.predictor.read_model()
 
     def read_status_patch_bin(self, time_last, time_unit: float):
         time_unit = float(time_unit)
@@ -860,18 +891,6 @@ class FlyFixMavlinkAPM(DroneMavlink):
         df_array = df_array[order_name]
 
         return df_array
-
-    def repair_configuration(self, status_data):
-        logging.info("Start repair with parameter")
-        start = time.time()
-        optimize = GAOptimizer()
-        optimize.set_status(status_data)
-        optimize.set_predictor(self.predictor)
-        optimize.set_bounds()
-        new_config = optimize.start_optimize()
-        end = time.time()
-        logging.info(f"Repair configuration {new_config} and cost: {end - start} second")
-        self.set_params(new_config)
 
     @staticmethod
     def runtime_extract_apm(msg):
@@ -1025,14 +1044,9 @@ class FlyFixMavlinkAPM(DroneMavlink):
                     time_last = msg.TimeUS
 
 
-class FlyFixMavlinkPX4(DroneMavlink):
+class FlyFixMavlinkPX4(FlyFixMavlink):
     def __init__(self, port, recv_msg_queue=None, send_msg_queue=None):
         super(FlyFixMavlinkPX4, self).__init__(port, recv_msg_queue, send_msg_queue)
-        self.predictor: CyLSTM = None
-        self.log_file = None
-        self.flight_log = None
-        self.read_finish = False
-        self.param_current = None
 
     def init_bin_log_file(self):
         log_path = f"{toolConfig.PX4_LOG_PATH}/*.ulg"
@@ -1048,10 +1062,6 @@ class FlyFixMavlinkPX4(DroneMavlink):
         param = pd.Series(self.flight_log.initial_parameters)
         # select parameters
         self.param_current = param[toolConfig.PARAM]
-
-    def init_predictor(self, model_class, epochs, batch_size):
-        self.predictor: Modeling = model_class(epochs, batch_size, toolConfig.DEBUG)
-        self.predictor.read_model()
 
     def read_status_patch_ulg(self, time_last, time_unit: float):
         time_unit = float(time_unit)
@@ -1089,18 +1099,6 @@ class FlyFixMavlinkPX4(DroneMavlink):
         df_array = df_array[df_array["TimeS"] < (time_last + time_unit + 0.1)]
 
         return df_array
-
-    def repair_configuration(self, status_data):
-        logging.info("Start repair with parameter")
-        start = time.time()
-        optimize = GAOptimizer()
-        optimize.set_status(status_data)
-        optimize.set_predictor(self.predictor)
-        optimize.set_bounds()
-        new_config = optimize.start_optimize()
-        end = time.time()
-        logging.info(f"Repair configuration {new_config} and cost: {end - start} second")
-        self.set_params(new_config)
 
     @staticmethod
     def runtime_extract_px4(msg):
@@ -1194,7 +1192,7 @@ class FlyFixMavlinkPX4(DroneMavlink):
                              f" {patch_average_loss}")
 
                 # threshold
-                if np.average(patch_average_loss) > 2 and not repaired:
+                if np.average(patch_average_loss) > 9.2 and not repaired:
                     self.repair_configuration(status_data)
                     repaired = True
 

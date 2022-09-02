@@ -29,7 +29,7 @@ if __name__ == '__main__':
 
             manager.mav_monitor_init(CollectMavlinkPX4)
 
-            manager.mav_monitor.set_mission('Cptool/mission_px4.txt', False)
+            manager.mav_monitor.set_mission('Cptool/fitCollection_px4.txt', False)
 
             time.sleep(2)
             manager.mav_monitor.set_random_param_and_start()

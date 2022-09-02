@@ -118,9 +118,11 @@ class ProblemGA(ea.Problem, Problem):
         # deviation loss
         patch_array_loss = self.predictor.cal_patch_deviation(predicted_feature, feature_y)
 
-        patch_average_loss = np.average(patch_array_loss, axis=1)
+        # patch_average_loss = np.average(patch_array_loss, axis=1)
 
-        configuration.ObjV = patch_average_loss.reshape((-1, 1))
+        patch_sum_loss = np.sum(patch_array_loss, axis=1)
+
+        configuration.ObjV = patch_sum_loss.reshape((-1, 1))
 
     def param_value2step(self, configuration):
         np_config = configuration * self.step

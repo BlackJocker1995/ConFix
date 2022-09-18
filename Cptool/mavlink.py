@@ -485,6 +485,39 @@ class CollectMavlinkAPM(DroneMavlink):
                 continue
         return True
 
+    @staticmethod
+    def extract_log_file_des_and_ach(log_file):
+        """
+        extract log message form a bin file with att desired and achieved
+        :param log_file:
+        :return:
+        """
+
+        logs = mavutil.mavlink_connection(log_file)
+        # init
+        out_data = []
+
+        while True:
+            msg = logs.recv_match(type=["ATT"])
+            if msg is None:
+                break
+            out = {
+                'TimeS': msg.TimeUS / 1000000,
+                'Roll': msg.Roll,
+                'DesRoll': msg.DesRoll,
+                'Pitch': msg.Pitch,
+                'DesPitch': msg.DesPitch,
+                'Yaw': msg.Yaw,
+                'DesYaw': msg.DesYaw
+            }
+            out_data.append(out)
+
+        pd_array = pd.DataFrame(out_data)
+        # Switch sequence, fill,  and return
+        pd_array['TimeS'] = pd_array['TimeS'].round(1)
+        pd_array = pd_array.drop_duplicates(keep='first')
+        return pd_array
+
     # Special function
     @staticmethod
     def random_param_value(param_json: dict):

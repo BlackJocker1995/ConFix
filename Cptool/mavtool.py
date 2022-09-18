@@ -3,6 +3,7 @@ import os
 
 import numpy as np
 import pandas as pd
+from matplotlib import pyplot as plt
 from pymavlink import mavutil, mavwp
 from Cptool.config import toolConfig
 import sys, select, os
@@ -103,3 +104,52 @@ def return_min_max_scaler(trans, values):
     status_value = trans.transform(status_value)
 
     return np.c_[status_value, param_value]
+
+
+def _systematicSampling(dataMat, number):
+    length = dataMat.shape[0]
+    k = length // number
+    out = range(length)
+    out_index = out[:length:k]
+    return out_index
+
+
+def draw_att_des_and_ach(pdarray, exec='pdf'):
+    index = _systematicSampling(pdarray, 150)
+    pdarray = pdarray.iloc[index]
+    # 'AccX', 'AccY', 'AccZ',
+    for name in ['Roll', 'Pitch', 'Yaw']:
+        x = pdarray[name].to_numpy()
+        y = pdarray[f"Des{name}"].to_numpy()
+
+        fig = plt.figure(figsize=(8, 5))
+        ax1 = plt.subplot()
+
+        ax2 = ax1.twinx()
+
+        ax2.fill_betweenx([0, 10 * np.max(np.abs(x - y))], [68, 68],
+                          [len(x), len(x)], color="tomato", alpha=0.2, label="Error State")
+
+        ax1.plot(y, '-', label='Achieved', linewidth=2)
+        ax1.plot(x, '--', label='Desired', linewidth=2)
+        ax1.set_xlabel("Timestamp", fontsize=18)
+        ax1.set_ylabel(f'{name} (deg)', fontsize=18)
+
+        ax2.bar(np.arange(len(x)), np.abs(x - y), label='Error')
+        ax2.set_ylim([0, 10 * np.max(np.abs(x - y))])
+        ax2.set_ylabel('Error (deg)', fontsize=18)
+
+
+
+        fig.legend(loc='upper center', ncol=4, fontsize='18')
+        plt.setp(ax1.get_xticklabels(), fontsize=18)
+        plt.setp(ax2.get_yticklabels(), fontsize=18)
+        plt.setp(ax1.get_yticklabels(), fontsize=18)
+
+
+
+        plt.margins(0, 0)
+        # # plt.gcf().subplots_adjust(bottom=0.12)
+        # plt.savefig(f'{os.getcwd()}/fig/{toolConfig.MODE}/{self.in_out}/{cmp_name}/{name.lower()}.{exec}')
+        plt.show()
+        # plt.clf()

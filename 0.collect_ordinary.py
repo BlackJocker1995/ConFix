@@ -38,7 +38,7 @@ if __name__ == '__main__':
 
         manager.mav_monitor_init(CollectMavlinkAPM)
 
-        manager.mav_monitor.set_mission('Cptool/mission.txt', True)
+        manager.mav_monitor.set_mission('Cptool/fitCollection.txt', False)
 
         manager.mav_monitor.start_mission()
 
@@ -46,7 +46,7 @@ if __name__ == '__main__':
 
         result = manager.mav_monitor.wait_complete()
 
-        manager.mav_monitor.reset_params()
+        # manager.mav_monitor.reset_params()
 
         manager.stop_sitl()
 

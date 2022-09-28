@@ -4,12 +4,39 @@ import os
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
-from pymavlink import mavutil, mavwp
+from pymavlink import mavutil, mavwp, mavextra
 from Cptool.config import toolConfig
 import sys, select, os
 import datetime
 from timeit import default_timer as timer
 import signal
+
+class Location:
+    def __init__(self, x, y=None, timeS=0):
+        if y is None:
+            self.x = x.x
+            self.y = x.y
+        else:
+            self.x = x
+            self.y = y
+        self.timeS = timeS
+        self.npa = np.array([x, y])
+
+    def __sub__(self, other):
+        return Location(self.x-other.x, self.y-other.y)
+
+    def __str__(self):
+        return f"X: {self.x} ; Y: {self.y}"
+
+    def sum(self):
+        return self.npa.sum()
+
+    @classmethod
+    def distance(cls, point1, point2):
+        if point1.x == 0 or point2.x == 0:
+            return 0
+        return mavextra.distance_lat_lon(point1.x, point1.y,
+                                         point2.x, point2.y)
 
 def load_param() -> json:
     """
@@ -138,8 +165,6 @@ def draw_att_des_and_ach(pdarray, exec='pdf'):
         ax2.bar(np.arange(len(x)), np.abs(x - y), label='Error')
         ax2.set_ylim([0, 10 * np.max(np.abs(x - y))])
         ax2.set_ylabel('Error (deg)', fontsize=18)
-
-
 
         fig.legend(loc='upper center', ncol=4, fontsize='18')
         plt.setp(ax1.get_xticklabels(), fontsize=18)

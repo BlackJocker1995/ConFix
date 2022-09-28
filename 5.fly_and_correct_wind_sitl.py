@@ -9,26 +9,21 @@ from ModelFit.approximate import CyTCN
 if __name__ == '__main__':
     manager = FixSimManager(debug=toolConfig.DEBUG)
 
-    # manager.start_sitl()
+    manager.start_sitl()
 
-    mav_monitor = FlyFixMavlinkAPM(14540, multiprocessing.Queue(), multiprocessing.Queue())
-    mav_monitor.connect()
-    # while not mav_monitor.ready2fly():
-    #     time.sleep(0.1)
+    manager.mav_monitor_init(FlyFixMavlinkAPM)
 
-    mav_monitor.init_predictor(CyTCN, 100, 128)
+    manager.mav_monitor.init_predictor(CyTCN, 100, 128)
 
-    mav_monitor.set_mission('Cptool/fitCollection.txt', False)
+    manager.mav_monitor.set_mission('Cptool/fitCollection.txt', False)
 
-    manager.change_sitl_wind()
+    manager.mav_monitor.start_mission()
 
-    mav_monitor.start_mission()
+    # manager.mav_monitor.init_bin_log_file()
 
-    mav_monitor.init_bin_log_file()
-
-    time.sleep(10)
-
+    time.sleep(6)
+    manager.change_sitl_wind(speed=15)
     # mav_monitor.start()
-    mav_monitor.online_bin_monitor()
+    # manager.mav_monitor.online_bin_monitor()
 
     manager.stop_sitl()

@@ -61,6 +61,32 @@ class ProblemFunLoss(Problem):
         return np.average(patch_array_loss)
 
 
+class ProblemDQN(Problem):
+    # TODO: DQN Optimizer
+    def __init__(self):
+        super().__init__()
+
+    def function(self, configuration):
+        configuration = self.param_value2step(configuration)
+        logging.debug(f"Optimizer configuration: {configuration}")
+        # replace parameter value
+        try_statue_data = self.status_data.replace(configuration)
+        # status data to feature data
+        feature_data = self.predictor.status2feature(try_statue_data)
+        # create predicted status of this status patch
+        feature_x, feature_y = self.predictor.data_split(feature_data)
+        if isinstance(self.predictor, CyTCN):
+            feature_y = feature_y.reshape((feature_y.shape[0], -1))
+        # Predict
+        predicted_feature = self.predictor.predict_feature(feature_x)
+        if isinstance(self.predictor, CyTCN):
+            predicted_feature = predicted_feature.reshape((predicted_feature.shape[0], -1))
+        # deviation loss
+        patch_array_loss = self.predictor.cal_patch_deviation(predicted_feature, feature_y)
+
+        return np.average(patch_array_loss)
+
+
 class ProblemGA(ea.Problem, Problem):
     def __init__(self, name, M, maxormins, Dim,
                  varTypes, lb, ub, lbin, ubin):

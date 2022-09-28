@@ -17,7 +17,7 @@ class ToolConfig:
         # Simulation Speed
         self.__dict__["SPEED"] = 3
         # Flight home (None, AVC_plane)
-        self.__dict__["HOME"] = "AVC_plane"  # "AVC_plane"
+        self.__dict__["HOME"] = "AVC_plane"
         # Output Debug Message
         self.__dict__["DEBUG"] = True
         # Wind Speed range
@@ -155,7 +155,7 @@ class ToolConfig:
         self.__dict__["OUTPUT_DATA_LEN"] = self.__dict__["STATUS_LEN"] * self.__dict__["OUTPUT_LEN"]
 
         # 每一个片段的大小
-        self.__dict__["SEGMENT_LEN"] = 12
+        self.__dict__["SEGMENT_LEN"] = 10 - self.__dict__["INPUT_LEN"]
 
         # 是否还原
         self.__dict__["RETRANS"] = True

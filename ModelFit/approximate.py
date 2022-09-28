@@ -13,6 +13,7 @@ from keras.layers import Dense, Dropout, RepeatVector
 from keras.layers import LSTM
 from keras.models import Sequential
 from numpy.lib.stride_tricks import sliding_window_view
+from sklearn.metrics import confusion_matrix, classification_report
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 from tcn import TCN
@@ -20,7 +21,7 @@ from tensorflow.python.keras.models import load_model
 from tqdm import tqdm
 
 from Cptool.config import toolConfig
-from Cptool.mavtool import min_max_scaler_param, min_max_scaler
+from Cptool.mavtool import min_max_scaler_param, min_max_scaler, _systematicSampling
 
 
 class Modeling(object):
@@ -195,57 +196,72 @@ class Modeling(object):
 
         values = self._cs_to_sl(test)
         X, Y = self.data_split(values)
-
+        # Predict
         predict_y = self._model.predict(X)
-        # if self._resize:
-        #     scalar = self.load_trans()
-        #     predict_y = scalar.inverse_transform(predict_y)
-        #     Y = scalar.inverse_transform(Y)
+        predict_y = predict_y.reshape((predict_y.shape[0], -1))
+        Y = Y.reshape((Y.shape[0], -1))
+        # Calculate loss
+        patch_array_loss = Modeling.cal_patch_deviation(predict_y, Y)
+        # Inverse Transform
+        scalar = self.load_trans()
+        predict_y = scalar.inverse_transform(predict_y)
+        Y = scalar.inverse_transform(Y)
 
-        if X.shape[0] > num:
-            col = self._systematicSampling(X, num)
-            # col = np.arange(200, 400)
-            predict_y = predict_y[col, :]
-            test = Y[col, :]
-        else:
-            test = Y
+        col = _systematicSampling(patch_array_loss, num)
+        # col = np.arange(200, 400)
+        predict_y = predict_y[col, :]
+        test = Y[col, :]
+        patch_array_loss = patch_array_loss[col]
         # 'AccX', 'AccY', 'AccZ',
-        for name, i in zip(['Roll', 'Pitch', 'Yaw', 'RateRoll', 'RatePitch', 'RateYaw', ], range(6)):
-            x = predict_y[:, i]
-            y = test[:, i]
+        # for name, i in zip(['Roll', 'Pitch', 'Yaw', 'RateRoll', 'RatePitch', 'RateYaw', 'AccX', 'AccY', 'AccZ', 'GyrX', 'GyrY', 'GyrZ', 'MagX', 'MagY', 'MagZ'], range(15)):
+        #     x = predict_y[:, i]
+        #     y = test[:, i]
+        #
+        #     fig = plt.figure(figsize=(8, 5))
+        #     ax1 = plt.subplot()
+        #
+        #     ax2 = ax1.twinx()
+        #
+        #     ax1.plot(x, '-', label='Predicted', linewidth=2)
+        #     ax1.plot(y, '--', label='Real', linewidth=2)
+        #     ax1.set_xlabel("Timestamp", fontsize=18)
+        #
+        #     ax2.bar(np.arange(len(x)), np.abs(x - y), label='Error')
+        #     ax2.set_ylim([0, 10 * np.max(np.abs(x - y))])
+        #     if name in ['AccX', 'AccY', 'AccZ']:
+        #         ax1.set_ylabel(f'{name} (m/s/s)', fontsize=18)
+        #         ax2.set_ylabel('Error (m/s/s)', fontsize=18)
+        #     if name in ['RateRoll', 'RatePitch', 'RateYaw', 'GyrX', 'GyrY', 'GyrZ']:
+        #         ax1.set_ylabel(f'{name} (deg/s)', fontsize=18)
+        #         ax2.set_ylabel('Error (deg/s)', fontsize=18)
+        #     if name in ['Roll', 'Pitch', 'Yaw']:
+        #         ax1.set_ylabel(f'{name} (deg)', fontsize=18)
+        #         ax2.set_ylabel('Error (deg)', fontsize=18)
+        #     if name in ['MagX', 'MagY', 'MagZ']:
+        #         ax1.set_ylabel(f'{name} (gauss)', fontsize=18)
+        #         ax2.set_ylabel('Error (gauss)', fontsize=18)
+        #
+        #     fig.legend(loc='upper center', ncol=3, fontsize='18')
+        #     plt.setp(ax1.get_xticklabels(), fontsize=18)
+        #     plt.setp(ax2.get_yticklabels(), fontsize=18)
+        #     plt.setp(ax1.get_yticklabels(), fontsize=18)
+        #
+        #     plt.margins(0, 0)
+        #     # plt.gcf().subplots_adjust(bottom=0.12)
+        #     # plt.savefig(f'{os.getcwd()}/fig/{toolConfig.MODE}/{self.in_out}/{cmp_name}/{name.lower()}.{exec}')
+        #     plt.show()
 
-            fig = plt.figure(figsize=(8, 5))
-            ax1 = plt.subplot()
-
-            ax2 = ax1.twinx()
-
-            ax1.plot(x, '-', label='Predicted', linewidth=2)
-            ax1.plot(y, '--', label='Real', linewidth=2)
-            if name in ['AccX', 'AccY', 'AccZ']:
-                ax1.set_ylabel(f'{name} (m/s/s)', fontsize=18)
-            if name in ['RateRoll', 'RatePitch', 'RateYaw']:
-                ax1.set_ylabel(f'{name} (deg/s)', fontsize=18)
-            if name in ['Roll', 'Pitch', 'Yaw']:
-                ax1.set_ylabel(f'{name} (deg)', fontsize=18)
-            ax2.bar(np.arange(len(x)), np.abs(x - y), label='Error')
-            ax2.set_ylim([0, 10 * np.max(np.abs(x - y))])
-            if name in ['AccX', 'AccY', 'AccZ']:
-                ax2.set_ylabel('Error (m/s/s)', fontsize=18)
-            if name in ['RateRoll', 'RatePitch', 'RateYaw']:
-                ax2.set_ylabel('Error (deg/s)', fontsize=18)
-            if name in ['Roll', 'Pitch', 'Yaw']:
-                ax2.set_ylabel('Error (deg)', fontsize=18)
-
-            fig.legend(loc='upper center', ncol=3, fontsize='18')
-            plt.setp(ax1.get_xticklabels(), fontsize=18)
-            plt.setp(ax2.get_yticklabels(), fontsize=18)
-            plt.setp(ax1.get_yticklabels(), fontsize=18)
-
-            plt.margins(0, 0)
-            # plt.gcf().subplots_adjust(bottom=0.12)
-            plt.savefig(f'{os.getcwd()}/fig/{toolConfig.MODE}/{self.in_out}/{cmp_name}/{name.lower()}.{exec}')
-            # plt.show()
-            plt.clf()
+        # Draw loss
+        fig = plt.figure(figsize=(8, 5))
+        ax = plt.subplot()
+        ax.bar(np.arange(len(patch_array_loss)), patch_array_loss, 1,label='Accumulated Deviation')
+        ax.set_ylabel(f'Accumulated Deviation', fontsize=18)
+        ax.set_xlabel(f'Timestamp', fontsize=18)
+        ax.set_ylim([0, 10])
+        plt.setp(ax.get_xticklabels(), fontsize=18)
+        plt.setp(ax.get_yticklabels(), fontsize=18)
+        fig.legend(loc='upper center', ncol=1, fontsize='18')
+        plt.show()
 
     def test_feature_draw(self, X, Y, cmp_name, exec='pdf'):
         if self._model is None:
@@ -328,9 +344,8 @@ class Modeling(object):
         self._model.predict(test_X)
         end = time.time()
         logging.info("time cost:%.4f s" % (end - start))
-
+        # Calculate score
         score = self._model.evaluate(test_X, test_Y, batch_size=256, verbose=1)
-        logging.info(f"{score[1]}")
         return score[1]
 
     def test_kfold(self, model_path, test_data, k, cuda: bool = False):
@@ -413,10 +428,10 @@ class Modeling(object):
         #     status_data = status_data.reshape([status_data.shape[0], status_data.shape[2]])
         deviation = np.abs(status_data - predicted_data)
         if len(predicted_data.shape) == 3:
-            sliding_patch = sliding_window_view(deviation, 6, axis=1).astype(dtype=np.double)
+            sliding_patch = sliding_window_view(deviation, toolConfig.SEGMENT_LEN, axis=1).astype(dtype=np.double)
             loss = sliding_patch.sum(axis=tuple(range(2, 4)))
         else:
-            sliding_patch = sliding_window_view(deviation, 6, axis=0).astype(dtype=np.double)
+            sliding_patch = sliding_window_view(deviation, toolConfig.SEGMENT_LEN, axis=0).astype(dtype=np.double)
             loss = sliding_patch.sum(axis=1).sum(axis=1)
         # predicted_data = sliding_window_view(predicted_data, 6, axis=0).astype(dtype=np.double)
         # status_data = sliding_window_view(status_data, 6, axis=0).astype(dtype=np.double)

@@ -1,14 +1,20 @@
+from collections import deque
+from random import random
+
 import geatpy as ea
 import numpy as np
 import pandas as pd
 from bayes_opt import BayesianOptimization
 from gekko import GEKKO
+from keras.engine.sequential import Sequential
+from keras.legacy_tf_layers.core import Dense
+from keras.optimizers.optimizer_v2.adam import Adam
 from scipy.optimize import minimize
 from sko.PSO import PSO
 from Cptool.config import toolConfig
 from Cptool.mavtool import load_param, select_sub_dict, read_unit_from_dict, read_range_from_dict, get_default_values
 from ModelFit.approximate import CyLSTM
-from optimize.problem import Problem, ProblemFunLoss, ProblemGA
+from optimize.problem import Problem, ProblemFunLoss, ProblemGA, ProblemDQN
 
 
 class DroneOptimizer:
@@ -148,3 +154,57 @@ class GAOptimizer(DroneOptimizer):
 
         return self.problem.param_value2step(candidate_obj)
 
+
+class DQNOptimizer(DroneOptimizer):
+    def __init__(self, state_size, action_size):
+        super(DQNOptimizer, self).__init__(state_size, action_size)
+        self.problem = ProblemDQN()
+        self.state_size = state_size
+        self.action_size = action_size
+        self.memory = deque(maxlen=2000)
+        self.gamma = 0.95    # discount rate
+        self.epsilon = 1.0  # exploration rate
+        self.epsilon_min = 0.01
+        self.epsilon_decay = 0.995
+        self.learning_rate = 0.001
+        self.model = self._build_model()
+
+    def _build_model(self):
+        # Neural Net for Deep-Q learning Model
+        model = Sequential()
+        model.add(Dense(24, input_dim=self.state_size, activation='relu'))
+        model.add(Dense(24, activation='relu'))
+        model.add(Dense(self.action_size, activation="softmax", name="fc2"))
+        model.compile(loss='mse', optimizer=Adam(lr=self.learning_rate))
+        return model
+
+    def memorize(self, state, action, reward, next_state):
+        self.memory.append((state, action, reward, next_state))
+
+    def act(self, state):
+        act_values = self.model.predict(state)
+        act_values * self.problem.step
+        return act_values  # returns action
+
+    def replay(self, batch_size):
+        minibatch = random.sample(self.memory, batch_size)
+        for state, action, reward, next_state, done in minibatch:
+            target = reward
+            if not done:
+                target = (reward + self.gamma *
+                          np.amax(self.model.predict(next_state)[0]))
+            target_f = self.model.predict(state)
+            target_f[0][action] = target
+            self.model.fit(state, target_f, epochs=1, verbose=0)
+        if self.epsilon > self.epsilon_min:
+            self.epsilon *= self.epsilon_decay
+
+    def load(self, name):
+        self.model.load_weights(name)
+
+    def save(self, name):
+        self.model.save_weights(name)
+
+    def start_optimize(self):
+        # TODO: optimize start
+        pass

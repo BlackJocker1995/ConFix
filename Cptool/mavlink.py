@@ -1,11 +1,14 @@
 import json
 import logging
+import math
 import multiprocessing
 import os
 import random
 import time
 
 import glob
+from multiprocessing import Process
+
 import numpy as np
 import pandas as pd
 import ray
@@ -16,7 +19,7 @@ from pyulog import ULog
 from tqdm import tqdm
 
 from Cptool.config import toolConfig
-from Cptool.mavtool import load_param, select_sub_dict, read_path_specified_file
+from Cptool.mavtool import load_param, select_sub_dict, read_path_specified_file, Location
 from ModelFit.approximate import CyLSTM, Modeling, CyTCN
 from optimize.optimizer import GAOptimizer, NelderGradient, BayesOptimizer, PSOOptimizer
 
@@ -137,7 +140,6 @@ class DroneMavlink(multiprocessing.Process):
         """
         if not self._master:
             raise ValueError('Connect at first!')
-
         self._master.param_set_send(param, value)
         self.get_param(param)
 
@@ -1025,6 +1027,10 @@ class FlyFixMavlinkAPM(FlyFixMavlink):
         file = open(self.log_file, 'rb')
         repaired = False
         while True:
+            # Exist commands
+            if not self.recv_msg_queue.empty():
+                return self.recv_msg_queue.get()
+
             time.sleep(1)
             # Flush write buffer
             file.flush()

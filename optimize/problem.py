@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 
 from Cptool.config import toolConfig
+from Cptool.mavtool import load_param, pad_configuration_default_value
 from ModelFit.approximate import CyLSTM, CyTCN
 
 
@@ -122,7 +123,7 @@ class ProblemGA(ea.Problem, Problem):
         # repeat data
         repeat_status = pd.concat([self.status_data] * x.shape[0]).reset_index(drop=True)
         repeat_param = pd.DataFrame(np.repeat(x.values, self.status_data.shape[0], axis=0), columns=x.columns)
-        repeat_status[toolConfig.PARAM] = repeat_param
+        repeat_status[toolConfig.PARAM_PART] = repeat_param
 
         status_step = self.status_data.shape[0]
         feature_step = self.status_data.shape[0] - toolConfig.INPUT_LEN

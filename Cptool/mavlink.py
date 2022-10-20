@@ -613,7 +613,7 @@ class CollectMavlinkAPM(DroneMavlink):
                 if msg['severity'] in [0, 2]:
                     # self.send_msg_queue.put('crash')
                     logging.info('ArduCopter detect Crash.')
-                    self.msg_queue.put('error')
+                    self.send_msg_queue.put('error')
                     break
 
 
@@ -631,10 +631,8 @@ class CollectMavlinkPX4(DroneMavlink):
         try:
             timeout_start = time.time()
             while time.time() < timeout_start + timeout:
-                # PX4 needs manual send the heartbeat of GCS
-                if toolConfig.MODE == "PX4":
-                    self._master.mav.heartbeat_send(mavutil.mavlink.MAV_TYPE_GCS,
-                                                    mavutil.mavlink.MAV_AUTOPILOT_INVALID, 0, 0, 0)
+                # PX4 needs manual send the heartbeat for GCS
+                self.gcs_msg_request()
                 message = self._master.recv_match(type=['STATUSTEXT'], blocking=False, timeout=30)
                 if message is None:
                     continue

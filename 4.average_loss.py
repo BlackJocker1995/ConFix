@@ -18,7 +18,7 @@ def reject_outliers(data, m=2):
 
 if __name__ == '__main__':
     cylstm = CyTCN(100, 128)
-    feature = pd.read_csv(f"model/{toolConfig.MODE}/features_ordinary.csv")
+    feature = pd.read_csv(f"model/{toolConfig.MODE}/{toolConfig.INPUT_LEN}_{toolConfig.OUTPUT_LEN}/features.csv")
     cylstm.read_model()
 
     feature_x, feature_y = cylstm.data_split(feature)
@@ -39,4 +39,4 @@ if __name__ == '__main__':
 
     plt.show()
 
-    print(f"Max: {patch_array_loss.max()}  Min:{patch_array_loss.min()}")
+    print(f"Max: {patch_array_loss.max()}  Min:{patch_array_loss.min()} AVG:{np.average(patch_array_loss)}")

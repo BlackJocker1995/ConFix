@@ -10,6 +10,6 @@ if __name__ == '__main__':
     # CyLSTM.fit_trans(pd_csv)
 
     lstm = CyLSTM(100, 512)
-    feature = lstm.extract_feature(f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/ulg_changed/csv")
+    feature = lstm.extract_feature(f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/ulg_unstable/csv")
     # Save
-    feature.to_csv(f"model/{toolConfig.MODE}/{toolConfig.INPUT_LEN}_{toolConfig.OUTPUT_LEN}/features.csv", index=False)
+    feature.to_csv(f"model/{toolConfig.MODE}/{toolConfig.INPUT_LEN}_{toolConfig.OUTPUT_LEN}/unstable.csv", index=False)

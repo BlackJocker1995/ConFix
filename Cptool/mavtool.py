@@ -133,6 +133,17 @@ def return_min_max_scaler(trans, values):
     return np.c_[status_value, param_value]
 
 
+def pad_configuration_default_value(params_value):
+    para_dict = load_param()
+    # default values
+    all_default_value = para_dict.loc[['default']]
+    all_default_value = pd.concat([all_default_value]*params_value.shape[0])
+    # replace values
+    participle_param = toolConfig.PARAM_PART
+    all_default_value[participle_param] = params_value
+    return all_default_value.values
+
+
 def _systematicSampling(dataMat, number):
     length = dataMat.shape[0]
     k = length // number

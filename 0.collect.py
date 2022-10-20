@@ -1,3 +1,4 @@
+import argparse
 import os
 import time
 from datetime import datetime
@@ -40,12 +41,10 @@ if __name__ == '__main__':
 
         manager.mav_monitor.set_mission('Cptool/fitCollection.txt', False)
 
-        # manager.mav_monitor.set_random_param_and_start()
-        manager.mav_monitor.start_mission()
+        manager.mav_monitor.set_random_param_and_start()
+        # manager.mav_monitor.start_mission()
 
         # manager.start_mav_monitor()
-        time.sleep(3)
-        manager.change_sitl_wind(speed=6)
 
         result = manager.mav_monitor.wait_complete()
 

@@ -19,7 +19,7 @@ def reject_outliers(data, m=2):
 if __name__ == '__main__':
     toolConfig.select_mode("PX4")
     cytcn = CyTCN(100, 128)
-    feature = pd.read_csv(f"model/{toolConfig.MODE}/features.csv")
+    feature = pd.read_csv(f"model/{toolConfig.MODE}/{toolConfig.INPUT_LEN}_{toolConfig.OUTPUT_LEN}/unstable.csv")
     cytcn.read_model()
 
     feature_x, feature_y = cytcn.data_split(feature)
@@ -40,4 +40,4 @@ if __name__ == '__main__':
 
     plt.show()
 
-    print(f"Max: {patch_array_loss.max()}  Min:{patch_array_loss.min()}")
+    print(f"Max: {patch_array_loss.max()}  Min:{patch_array_loss.min()} AVG:{np.average(patch_array_loss)}")

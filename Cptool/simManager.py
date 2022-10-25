@@ -1,5 +1,5 @@
 """
-SimManager Version: 4.0
+SimManager Version: 4.1 22-10-25
 """
 import logging
 import math
@@ -19,6 +19,7 @@ from Cptool.simSimulator import SimSimulator
 
 
 class SimManager:
+
     def __init__(self, debug: bool = False):
         self._sim_task = None
         self._sitl_task = None
@@ -35,9 +36,12 @@ class SimManager:
             logging.basicConfig(format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s',
                                 level=logging.INFO)
 
+    """
+    Base Function
+    """
     def start_sim(self):
         """
-        启动AIRSIM_PATH目录下的Airsim模拟器
+        start simulator
         :return:
         """
         # Airsim
@@ -46,15 +50,15 @@ class SimManager:
             cmd = f'gnome-terminal -- {toolConfig.AIRSIM_PATH} ' \
                   f'-ResX={toolConfig.HEIGHT} -ResY={toolConfig.WEIGHT} -windowed'
         if toolConfig.SIM == 'Jmavsim':
-            cmd = f'gnome-terminal -- bash /home/rain/PX4-Autopilot/Tools/jmavsim_run.sh'
+            cmd = f'gnome-terminal -- bash {toolConfig.JMAVSIM_PATH}'
         if toolConfig.SIM == 'Morse':
-            cmd = f'gnome-terminal -- morse run /home/rain/ardupilot/libraries/SITL/examples/Morse/quadcopter.py'
+            cmd = f'gnome-terminal -- morse run {toolConfig.MORSE_PATH}'
         if toolConfig.SIM == 'Gazebo':
             cmd = f'gnome-terminal -- gazebo --verbose worlds/iris_arducopter_runway.world'
         if cmd is None:
             raise ValueError('Not support mode')
         logging.info(f'Start Simulator {toolConfig.SIM}')
-        self._sim_task = pexpect.spawn(cmd, cwd='/home/rain/')
+        self._sim_task = pexpect.spawn(cmd)
 
     def start_sitl(self):
         """
@@ -73,26 +77,26 @@ class SimManager:
         if toolConfig.MODE == 'Ardupilot':
             if toolConfig.SIM == 'Airsim':
                 if toolConfig.HOME is not None:
-                    cmd = f"python3 /home/rain/ardupilot/Tools/autotest/sim_vehicle.py -v ArduCopter " \
+                    cmd = f"python3 {toolConfig.SITL_PATH} -v ArduCopter " \
                           f"--location={toolConfig.HOME}" \
                           f" -f airsim-copter --out=127.0.0.1:14550 --out=127.0.0.1:14540 " \
                           f" -S {toolConfig.SPEED}"
                 else:
-                    cmd = f"python3 /home/rain/ardupilot/Tools/autotest/sim_vehicle.py -v ArduCopter -f airsim-copter " \
+                    cmd = f"python3 {toolConfig.SITL_PATH} -v ArduCopter -f airsim-copter " \
                           f"--out=127.0.0.1:14550 --out=127.0.0.1:14540 -S {toolConfig.SPEED}"
             if toolConfig.SIM == 'Morse':
-                cmd = f"python3 /home/rain/ardupilot/Tools/autotest/sim_vehicle.py -v ArduCopter --model morse-quad " \
+                cmd = f"python3 {toolConfig.SITL_PATH}  -v ArduCopter --model morse-quad " \
                       f"--add-param-file=/home/rain/ardupilot/libraries/SITL/examples/Morse/quadcopter.parm  " \
                       f"--out=127.0.0.1:14550 -S {toolConfig.SPEED}"
             if toolConfig.SIM == 'Gazebo':
-                cmd = f'python3 /home/rain/ardupilot/Tools/autotest/sim_vehicle.py -f gazebo-iris -v ArduCopter ' \
+                cmd = f'python3 {toolConfig.SITL_PATH} -f gazebo-iris -v ArduCopter ' \
                       f'--out=127.0.0.1:14550 -S {toolConfig.SPEED}'
             if toolConfig.SIM == 'SITL':
                 if toolConfig.HOME is not None:
-                    cmd = f"python3 /home/rain/ardupilot/Tools/autotest/sim_vehicle.py --location={toolConfig.HOME} " \
+                    cmd = f"python3 {toolConfig.SITL_PATH}  --location={toolConfig.HOME} " \
                           f"--out=127.0.0.1:14550 --out=127.0.0.1:14540 -v ArduCopter -w -S {toolConfig.SPEED} "
                 else:
-                    cmd = f"python3 /home/rain/ardupilot/Tools/autotest/sim_vehicle.py " \
+                    cmd = f"python3 {toolConfig.SITL_PATH}  " \
                           f"--out=127.0.0.1:14550 --out=127.0.0.1:14540 -v ArduCopter -w -S {toolConfig.SPEED} "
             self._sitl_task = pexpect.spawn(cmd, cwd=toolConfig.ARDUPILOT_LOG_PATH, timeout=30, encoding='utf-8')
 
@@ -128,30 +132,25 @@ class SimManager:
             os.remove(f"{toolConfig.ARDUPILOT_LOG_PATH}/eeprom.bin")
         if os.path.exists(f"{toolConfig.ARDUPILOT_LOG_PATH}/mav.parm"):
             os.remove(f"{toolConfig.ARDUPILOT_LOG_PATH}/mav.parm")
+        if os.path.exists(f"{toolConfig.PX4_RUN_PATH}/build/px4_sitl_default/tmp/rootfs/eeprom/parameters_10016") \
+                and toolConfig.MODE == "PX4":
+            os.remove(f"{toolConfig.PX4_RUN_PATH}/build/px4_sitl_default/tmp/rootfs/eeprom/parameters_10016")
 
         if toolConfig.HOME is not None:
-            cmd = f"python3 /home/rain/ardupilot/Tools/autotest/sim_vehicle.py --location={toolConfig.HOME} " \
-                  f"--out=127.0.0.1:1455{drone_i} --out=127.0.0.1:1454{drone_i} " \
-                  f"-v ArduCopter -w -S {toolConfig.SPEED} --instance {drone_i}"
+            cmd = f"python3 {toolConfig.SITL_PATH} --location={toolConfig.HOME} " \
+                      f"--out=127.0.0.1:1455{drone_i} --out=127.0.0.1:1454{drone_i} " \
+                      f"-v ArduCopter -w -S {toolConfig.SPEED} --instance {drone_i}"
         else:
-            cmd = f"python3 /home/rain/ardupilot/Tools/autotest/sim_vehicle.py " \
-                  f"--out=127.0.0.1:1455{drone_i} --out=127.0.0.1:1454{drone_i} " \
-                  f"-v ArduCopter -w -S {toolConfig.SPEED} --instance {drone_i}"
+            cmd = f"python3 {toolConfig.SITL_PATH} " \
+                      f"--out=127.0.0.1:1455{drone_i} --out=127.0.0.1:1454{drone_i} " \
+                      f"-v ArduCopter -w -S {toolConfig.SPEED} --instance {drone_i}"
 
         self._sitl_task = (pexpect.spawn(cmd, cwd=toolConfig.ARDUPILOT_LOG_PATH, timeout=30, encoding='utf-8'))
         logging.info(f"Start {toolConfig.MODE} --> [{toolConfig.SIM} - {drone_i}]")
 
-    def sim_monitor_init(self, simulator_class):
-        """
-        初始化airsim监控器
-        :return:
-        """
-        self.sim_monitor = simulator_class(recv_msg_queue=self.mav_msg_queue, send_msg_queue=self.sim_msg_queue)
-        time.sleep(3)
-
     def mav_monitor_init(self, mavlink_class: Type[DroneMavlink] = DroneMavlink, drone_i=0):
         """
-        初始化SITL在环
+        initial SITL monitor
         :return:
         """
         self.mav_monitor = mavlink_class(14540+int(drone_i),
@@ -169,7 +168,36 @@ class SimManager:
                     self._sitl_task.send("param set NAV_RCL_ACT 0 \n")
                     time.sleep(0.1)
                     self._sitl_task.send("param set NAV_DLL_ACT 0 \n")
+                    time.sleep(0.1)
+                    # Enable detector
+                    self._sitl_task.send("param set CBRK_FLIGHTTERM 0 \n")
                     return True
+
+    def sim_monitor_init(self, simulator_class):
+        """
+        init airsim monitor
+        :return:
+        """
+        self.sim_monitor = simulator_class(recv_msg_queue=self.mav_msg_queue, send_msg_queue=self.sim_msg_queue)
+        time.sleep(3)
+
+    def start_mav_monitor(self):
+        """
+        启动mavlink监控进程
+        :return:
+        """
+        self.mav_monitor.start()
+
+    def start_sim_monitor(self):
+        """
+        启动Airsim监控进程
+        :return:
+        """
+        self.sim_monitor.start()
+
+    """
+    Mavlink Operation
+    """
 
     def mav_monitor_connect(self):
         """
@@ -185,14 +213,27 @@ class SimManager:
         """
         self.mav_monitor.start_mission()
 
-    def sim_monitor_confirm_api(self):
-        self.sim_monitor.confirm_api()
+    def mav_monitor_set_mission(self, mission_file, random: bool = False):
+        """
+        Set mission
+        :param mission_file: file path
+        :param random:
+        :return:
+        """
+        return self.mav_monitor.set_mission(mission_file, random)
 
-    def sim_monitor_reset_item(self):
-        self.sim_monitor.reset_item()
+    def mav_monitor_set_random_param(self):
+        """
+        initial airsim monitor
+        :return:
+        """
+        params_dict = self.mav_monitor.load_param()
+        params_value = self.mav_monitor.random_param_value(params_dict)
+        self.mav_monitor.set_params(params_value)
 
-    def sim_close_msg(self):
-        pass
+    """
+    Simulator Operation
+    """
 
     def change_sitl_wind(self, direction=60, speed=10):
         self._sitl_task.send(f'param set SIM_WIND_DIR {direction} \n')
@@ -211,6 +252,12 @@ class SimManager:
         self.sim_close_msg()
         logging.debug('Send mavclosed to Airsim.')
 
+    """
+    Other get/set
+    """
+    def get_mav_monitor(self):
+        return self.mav_monitor
+
     def sitl_task(self) -> spawn:
         return self._sitl_task
 
@@ -224,64 +271,28 @@ class FixSimManager(SimManager, multiprocessing.Process):
         super(FixSimManager, self).__init__(debug)
         super(multiprocessing.Process, self).__init__()
 
-    def mav_monitor_set_mission(self, mission_file, random: bool = False):
+    def sim_monitor_confirm_api(self):
         """
-        设置任务
-        :param mission_file:任务路径
-        :param random:任务是否乱序
+        Only Airsim
         :return:
         """
-        return self.mav_monitor.set_mission(mission_file, random)
+        self.sim_monitor.confirm_api()
 
-    def mav_monitor_set_random_param(self):
+    def sim_monitor_reset_item(self):
         """
-        初始化airsim监控器
+        Only Airsim
         :return:
         """
-        params_dict = self.mav_monitor.load_param()
-        params_value = self.mav_monitor.random_param_value(params_dict)
-        self.mav_monitor.set_params(params_value)
+        self.sim_monitor.reset_item()
 
     def sim_monitor_set_wind(self, button, top):
         self.sim_monitor.set_wind_random(button, top)
 
-    def start_sim_monitor(self):
-        """
-        启动Airsim监控进程
-        :return:
-        """
-        self.sim_monitor.start()
-
-    def start_mav_monitor(self):
-        """
-        启动mavlink监控进程
-        :return:
-        """
-        self.mav_monitor.start()
-
-    def one_step_mav_monitor(self):
-        """
-        一键启动
-        :return:
-        """
-        self.start_sitl()
-        self.mav_monitor_init()
-        self.mav_monitor_connect()
-
-    def one_step_sim_monitor(self):
-        """
-        一键启动
-        :return:
-        """
-        self.start_sim()
-        self.sim_monitor_init()
-        self.sim_monitor_confirm_api()
-
     def run(self) -> None:
         """
-    monitor error during the flight
-    :return:
-    """
+        monitor error during the flight
+        :return:
+        """
 
         logging.info(f'Start error monitor.')
         # Setting

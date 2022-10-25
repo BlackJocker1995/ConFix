@@ -18,9 +18,9 @@ class ToolConfig:
         self.__dict__["MODE"] = None
 
         # Simulation Speed
-        self.__dict__["SPEED"] = 1
+        self.__dict__["SPEED"] = 3
         # Flight home (None, AVC_plane)
-        self.__dict__["HOME"] = "AVC_plane"
+        self.__dict__["HOME"] = "AVC_plane"  # "AVC_plane"
         # Output Debug Message
         self.__dict__["DEBUG"] = True
         # Wind Speed range
@@ -34,11 +34,18 @@ class ToolConfig:
         # Copter LOG Path
         self.__dict__["ARDUPILOT_LOG_PATH"] = '/media/rain/data'
 
+        #--------PATH ---------#
+        # STIL
+        self.__dict__["SITL_PATH"] = "/home/rain/ardupilot/Tools/autotest/sim_vehicle.py"
         # Airsim
         self.__dict__["AIRSIM_PATH"] = "/media/rain/data/airsim/Africa_Savannah/LinuxNoEditor/Africa_001.sh"
         # self.__dict__["AIRSIM_PATH"] = "/media/rain/data/airsim/Blocks/LinuxNoEditor/Blocks.sh"
         # PX4 LOG Path
         self.__dict__["PX4_RUN_PATH"] = '/home/rain/PX4-Autopilot'
+        # Jmavsim Path
+        self.__dict__["JMAVSIM_PATH"] = "/home/rain/PX4-Autopilot/Tools/jmavsim_run.sh"
+        # Morse path
+        self.__dict__["MORSE_PATH"] = "/home/rain/ardupilot/libraries/SITL/examples/Morse/quadcopter.py"
 
         self.__dict__["CLUSTER_CHOICE_NUM"] = 10
 
@@ -80,15 +87,15 @@ class ToolConfig:
             self.__dict__["PARAM"] = param_name
 
             self.__dict__["PARAM_PART"] = [
-                #"PSC_VELXY_P",
-                # "PSC_VELXY_I",
-                #"PSC_VELXY_D",
-                #"PSC_ACCZ_P",
-                #"PSC_ACCZ_I",
+                "PSC_VELXY_P",
+                "PSC_VELXY_I",
+                "PSC_VELXY_D",
+                "PSC_ACCZ_P",
+                "PSC_ACCZ_I",
                 "ATC_ANG_RLL_P",
                 "ATC_RAT_RLL_P",
                 "ATC_RAT_RLL_I",
-                "ATC_RAT_RLL_D",
+                # "ATC_RAT_RLL_D",
                 # "ATC_ANG_PIT_P",
                 # "ATC_RAT_PIT_P",
                 # "ATC_RAT_PIT_I",
@@ -96,12 +103,20 @@ class ToolConfig:
                 # "ATC_ANG_YAW_P",
                 # "ATC_RAT_YAW_P",
                 # "ATC_RAT_YAW_I",
-                # "ATC_RAT_YAW_D",
-                #"WPNAV_SPEED",
-                #"WPNAV_ACCEL",
-                #"ANGLE_MAX"
+                "ATC_RAT_YAW_D",
+                "WPNAV_SPEED",
+                "WPNAV_ACCEL",
+                "ANGLE_MAX"
             ]
 
+            # self.__dict__["PARAM"] = [
+            #     "PSC_VELXY_P",
+            #     "INS_POS1_Z",
+            #     "INS_POS2_Z",
+            #     "INS_POS3_Z",
+            #     "WPNAV_SPEED",
+            #     "ANGLE_MAX"
+            # ]
         elif mode == "PX4":
             # PX4 : ['Jmavsim']
             self.__dict__["SIM"] = "Jmavsim"  # "Jmavsim"
@@ -129,14 +144,9 @@ class ToolConfig:
                 "MPC_Z_P",
                 "MC_PITCHRATE_P",
                 "MC_ROLLRATE_P",
-                # "MC_ROLLRATE_MAX",
                 "MC_YAWRATE_P",
-                # "MPC_THR_MIN",
-                # "MPC_THR_MAX",
                 "MPC_TILTMAX_AIR",
                 "MIS_YAW_ERR",
-                # "MPC_XY_VEL_MAX",
-                # "MC_PITCHRATE_MAX",
                 "MPC_Z_VEL_MAX_DN",
                 "MPC_Z_VEL_MAX_UP",
                 "MPC_TKO_SPEED"
@@ -150,30 +160,30 @@ class ToolConfig:
         ######################
         # Model Config       #
         ######################
-        # Status 长度
+        # Status length
         self.__dict__["STATUS_LEN"] = len(self.__dict__["STATUS_ORDER"]) - 1
 
-        # Parameter的长度
+        # Parameter length
         self.__dict__["PARAM_LEN"] = len(self.__dict__["PARAM"])
 
-        # MODEL的输入长度
+        # Predictor input vector length
         self.__dict__["INPUT_LEN"] = 4
-        # MODEL的输出长度
+        # Predictor output vector length
         self.__dict__["OUTPUT_LEN"] = 1
 
-        # 每一个input数据的长度
+        # input data entry length
         self.__dict__["DATA_LEN"] = self.__dict__["STATUS_LEN"] + len(toolConfig.PARAM)
 
-        # 输入的数据长度
+        # Whole predictor input length
         self.__dict__["INPUT_DATA_LEN"] = self.__dict__["DATA_LEN"] * self.__dict__["INPUT_LEN"]
 
-        # 输出的数据长度
+        # Whole predictor output length
         self.__dict__["OUTPUT_DATA_LEN"] = self.__dict__["STATUS_LEN"] * self.__dict__["OUTPUT_LEN"]
 
-        # 每一个片段的大小
+        # Vector length of a segment
         self.__dict__["SEGMENT_LEN"] = 10 - self.__dict__["INPUT_LEN"]
 
-        # 是否还原
+        # transform values
         self.__dict__["RETRANS"] = True
 
 

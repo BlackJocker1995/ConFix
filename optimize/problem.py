@@ -30,7 +30,7 @@ class Problem:
     def param_value2step(self, configuration):
         np_config = np.ceil(configuration / self.step)
         np_config = np_config * self.step
-        np_config = pd.DataFrame([np_config.tolist()], columns=toolConfig.PARAM)
+        np_config = pd.DataFrame([np_config.tolist()], columns=toolConfig.PARAM_PART)
         return np_config.iloc[0].to_dict()
 
     def function(self, configuration):
@@ -153,7 +153,7 @@ class ProblemGA(ea.Problem, Problem):
 
     def param_value2step(self, configuration):
         np_config = configuration * self.step
-        np_config = pd.DataFrame(np_config, columns=toolConfig.PARAM)
+        np_config = pd.DataFrame(np_config, columns=toolConfig.PARAM_PART)
         return np_config.iloc[0].to_dict()
 
     def reasonable_range(self, param):
@@ -163,5 +163,5 @@ class ProblemGA(ea.Problem, Problem):
         :return:
         """
         np_config = param * self.step
-        np_config = pd.DataFrame(np_config, columns=toolConfig.PARAM)
+        np_config = pd.DataFrame(np_config, columns=toolConfig.PARAM_PART)
         return np_config

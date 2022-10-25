@@ -300,7 +300,7 @@ class DroneMavlink(multiprocessing.Process):
         if threat is not None:
             arrays = np.array_split(file_list, threat)
             threat_manage = []
-            ray.init(include_dashboard=True, dashboard_host="10.0.0.14", dashboard_port=8088)
+            ray.init(include_dashboard=True, dashboard_host="127.0.0.1", dashboard_port=8088)
 
             for array in arrays:
                 if toolConfig.MODE == "PX4":

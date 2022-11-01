@@ -60,6 +60,18 @@ class SimManager:
         logging.info(f'Start Simulator {toolConfig.SIM}')
         self._sim_task = pexpect.spawn(cmd)
 
+    def start_multiple_sim(self, drone_i=0):
+        """
+        start multiple simulator (only jmavsim now)
+        :return:
+        """
+        # Airsim
+        cmd = None
+        if toolConfig.SIM == 'Jmavsim':
+            port = 4560 + int(drone_i)
+            cmd = f'{toolConfig.JMAVSIM_PATH} -p {port} -l'
+        self._sim_task = pexpect.spawn(cmd, cwd=toolConfig.PX4_RUN_PATH, timeout=30, encoding='utf-8')
+
     def start_sitl(self):
         """
         Start SITL PX4 or Ardupilot
@@ -115,8 +127,7 @@ class SimManager:
             if toolConfig.SIM == 'Airsim':
                 cmd = f'make {pre_argv} px4_sitl_default none_iris'
             if toolConfig.SIM == 'Jmavsim':
-                cmd = f'make {pre_argv} px4_sitl_default jmavsim'
-
+                cmd = f"make {pre_argv} px4_sitl_default jmavsim"
             self._sitl_task = pexpect.spawn(cmd, cwd=toolConfig.PX4_RUN_PATH, timeout=30, encoding='utf-8')
         logging.info(f"Start {toolConfig.MODE} --> [{toolConfig.SIM}]")
         if cmd is None:
@@ -128,24 +139,45 @@ class SimManager:
         :param drone_i:
         :return:
         """
-        if os.path.exists(f"{toolConfig.ARDUPILOT_LOG_PATH}/eeprom.bin"):
-            os.remove(f"{toolConfig.ARDUPILOT_LOG_PATH}/eeprom.bin")
-        if os.path.exists(f"{toolConfig.ARDUPILOT_LOG_PATH}/mav.parm"):
-            os.remove(f"{toolConfig.ARDUPILOT_LOG_PATH}/mav.parm")
-        if os.path.exists(f"{toolConfig.PX4_RUN_PATH}/build/px4_sitl_default/tmp/rootfs/eeprom/parameters_10016") \
-                and toolConfig.MODE == "PX4":
-            os.remove(f"{toolConfig.PX4_RUN_PATH}/build/px4_sitl_default/tmp/rootfs/eeprom/parameters_10016")
+        if toolConfig.MODE == 'Ardupilot':
+            if os.path.exists(f"{toolConfig.ARDUPILOT_LOG_PATH}/eeprom.bin"):
+                os.remove(f"{toolConfig.ARDUPILOT_LOG_PATH}/eeprom.bin")
+            if os.path.exists(f"{toolConfig.ARDUPILOT_LOG_PATH}/mav.parm"):
+                os.remove(f"{toolConfig.ARDUPILOT_LOG_PATH}/mav.parm")
 
-        if toolConfig.HOME is not None:
-            cmd = f"python3 {toolConfig.SITL_PATH} --location={toolConfig.HOME} " \
-                      f"--out=127.0.0.1:1455{drone_i} --out=127.0.0.1:1454{drone_i} " \
-                      f"-v ArduCopter -w -S {toolConfig.SPEED} --instance {drone_i}"
-        else:
-            cmd = f"python3 {toolConfig.SITL_PATH} " \
-                      f"--out=127.0.0.1:1455{drone_i} --out=127.0.0.1:1454{drone_i} " \
-                      f"-v ArduCopter -w -S {toolConfig.SPEED} --instance {drone_i}"
+            if toolConfig.HOME is not None:
+                cmd = f"python3 {toolConfig.SITL_PATH} --location={toolConfig.HOME} " \
+                          f"--out=127.0.0.1:1455{drone_i} --out=127.0.0.1:1454{drone_i} " \
+                          f"-v ArduCopter -w -S {toolConfig.SPEED} --instance {drone_i}"
+            else:
+                cmd = f"python3 {toolConfig.SITL_PATH} " \
+                          f"--out=127.0.0.1:1455{drone_i} --out=127.0.0.1:1454{drone_i} " \
+                          f"-v ArduCopter -w -S {toolConfig.SPEED} --instance {drone_i}"
 
-        self._sitl_task = (pexpect.spawn(cmd, cwd=toolConfig.ARDUPILOT_LOG_PATH, timeout=30, encoding='utf-8'))
+            self._sitl_task = (pexpect.spawn(cmd, cwd=toolConfig.ARDUPILOT_LOG_PATH, timeout=30, encoding='utf-8'))
+
+        if toolConfig.MODE == toolConfig.MODE == 'PX4':
+
+            if os.path.exists(f"{toolConfig.PX4_RUN_PATH}/build/px4_sitl_default/tmp/rootfs/eeprom/parameters_10016") \
+                    and toolConfig.MODE == "PX4":
+                os.remove(f"{toolConfig.PX4_RUN_PATH}/build/px4_sitl_default/tmp/rootfs/eeprom/parameters_10016")
+
+            if toolConfig.HOME is None:
+                pre_argv = f"PX4_HOME_LAT=-35.362758 " \
+                           f"PX4_HOME_LON=149.165135 " \
+                           f"PX4_HOME_ALT=583.730592 " \
+                           f"PX4_SIM_SPEED_FACTOR={toolConfig.SPEED}"
+            else:
+                pre_argv = f"PX4_HOME_LAT=40.072842 " \
+                           f"PX4_HOME_LON=-105.230575 " \
+                           f"PX4_HOME_ALT=0.000000 " \
+                           f"PX4_SIM_SPEED_FACTOR={toolConfig.SPEED}"
+
+            if toolConfig.SIM == 'Jmavsim':
+                cmd = f"{toolConfig.PX4_RUN_PATH}/Tools/sitl_multiple_run_single.sh {drone_i}"
+
+            self._sitl_task = pexpect.spawn(cmd, cwd=toolConfig.PX4_RUN_PATH, timeout=30, encoding='utf-8')
+
         logging.info(f"Start {toolConfig.MODE} --> [{toolConfig.SIM} - {drone_i}]")
 
     def mav_monitor_init(self, mavlink_class: Type[DroneMavlink] = DroneMavlink, drone_i=0):
@@ -163,6 +195,7 @@ class SimManager:
         elif toolConfig.MODE == 'PX4':
             while True:
                 line = self._sitl_task.readline()
+                # print(line)
                 if 'notify' in line:
                     # Disable the fail warning and return
                     self._sitl_task.send("param set NAV_RCL_ACT 0 \n")
@@ -249,8 +282,17 @@ class SimManager:
                 break
         self._sitl_task.close(force=True)
         logging.info('Stop SITL task.')
-        self.sim_close_msg()
         logging.debug('Send mavclosed to Airsim.')
+
+    def stop_sim(self):
+        self._sim_task.sendcontrol('c')
+        while True:
+            line = self._sitl_task.readline()
+            if not line:
+                break
+        self._sim_task.close(force=True)
+        logging.info('Stop Sim task.')
+
 
     """
     Other get/set
@@ -438,4 +480,5 @@ class FixSimManager(SimManager, multiprocessing.Process):
                 break
 
         logging.info(f"Monitor result: {result}")
-        self.mav_monitor.recv_msg_queue.put(result)
+        self.mav_monitor.recv_msg_queue.put([result, time.time()])
+

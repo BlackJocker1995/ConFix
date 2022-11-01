@@ -11,6 +11,7 @@ import datetime
 from timeit import default_timer as timer
 import signal
 
+
 class Location:
     def __init__(self, x, y=None, timeS=0):
         if y is None:
@@ -23,7 +24,7 @@ class Location:
         self.npa = np.array([x, y])
 
     def __sub__(self, other):
-        return Location(self.x-other.x, self.y-other.y)
+        return Location(self.x - other.x, self.y - other.y)
 
     def __str__(self):
         return f"X: {self.x} ; Y: {self.y}"
@@ -37,6 +38,7 @@ class Location:
             return 0
         return mavextra.distance_lat_lon(point1.x, point1.y,
                                          point2.x, point2.y)
+
 
 def load_param() -> json:
     """
@@ -98,7 +100,7 @@ def min_max_scaler_param(param_value):
     param_bounds = read_range_from_dict(param_choice_dict)
     lb = param_bounds[:, 0]
     ub = param_bounds[:, 1]
-    param_value = (param_value - lb) / (ub-lb)
+    param_value = (param_value - lb) / (ub - lb)
     return param_value
 
 
@@ -107,7 +109,7 @@ def return_min_max_scaler_param(param_value):
     param_bounds = read_range_from_dict(param)
     lb = param_bounds[:, 0]
     ub = param_bounds[:, 1]
-    param_value = (param_value * (ub-lb)) + lb
+    param_value = (param_value * (ub - lb)) + lb
     return param_value
 
 
@@ -137,7 +139,7 @@ def pad_configuration_default_value(params_value):
     para_dict = load_param()
     # default values
     all_default_value = para_dict.loc[['default']]
-    all_default_value = pd.concat([all_default_value]*params_value.shape[0])
+    all_default_value = pd.concat([all_default_value] * params_value.shape[0])
     # replace values
     participle_param = toolConfig.PARAM_PART
     all_default_value[participle_param] = params_value
@@ -182,10 +184,23 @@ def draw_att_des_and_ach(pdarray, exec='pdf'):
         plt.setp(ax2.get_yticklabels(), fontsize=18)
         plt.setp(ax1.get_yticklabels(), fontsize=18)
 
-
-
         plt.margins(0, 0)
         # # plt.gcf().subplots_adjust(bottom=0.12)
         # plt.savefig(f'{os.getcwd()}/fig/{toolConfig.MODE}/{self.in_out}/{cmp_name}/{name.lower()}.{exec}')
         plt.show()
         # plt.clf()
+
+
+def sort_result_detect_repair(result_time, detect_time, repair_time):
+    """
+    check whether the result is appear after detecting and repairing.
+    :param result_time:
+    :param detect_time:
+    :param repair_time:
+    :return:
+    """
+    if result_time > repair_time:
+        return "repair"
+    if result_time > detect_time:
+        return "detect"
+    return "miss"

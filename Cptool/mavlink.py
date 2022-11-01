@@ -19,7 +19,7 @@ from pyulog import ULog
 from tqdm import tqdm
 
 from Cptool.config import toolConfig
-from Cptool.mavtool import load_param, select_sub_dict, read_path_specified_file, Location
+from Cptool.mavtool import load_param, select_sub_dict, read_path_specified_file, Location, sort_result_detect_repair
 from ModelFit.approximate import CyLSTM, Modeling, CyTCN
 from optimize.optimizer import GAOptimizer, NelderGradient, BayesOptimizer, PSOOptimizer
 
@@ -1023,11 +1023,23 @@ class FlyFixMavlinkAPM(FlyFixMavlink):
         # Wait for bin file created
         self.wait_bin_ready()
         file = open(self.log_file, 'rb')
-        repaired = False
+
+        # Flag
+        # detected
+        detected_time = 0
+        # created repair
+        repaired_time = 0
+        # upload configuration
+        REPAIRED = False
+
         while True:
             # Exist commands
             if not self.recv_msg_queue.empty():
-                return self.recv_msg_queue.get()
+                # receive error result
+                manager_msg, manager_msg_timestamp = self.recv_msg_queue.get()
+                # judge the system detect, repair this part.
+                detect_repair_result = sort_result_detect_repair(manager_msg_timestamp, detected_time, repaired_time)
+                return manager_msg, detect_repair_result
 
             time.sleep(1)
             # Flush write buffer
@@ -1043,7 +1055,7 @@ class FlyFixMavlinkAPM(FlyFixMavlink):
                 if status_data is None:
                     time.sleep(0.1)
                     logging.info(f"Successful break the loop.")
-                    return True
+                    return "pass", "repair"
                 elif status_data is False:
                     logging.debug(f"Reading status failure, try again.")
                     continue
@@ -1064,9 +1076,11 @@ class FlyFixMavlinkAPM(FlyFixMavlink):
                              f" {patch_average_loss}")
 
                 # APM threshold 2.3
-                if np.average(patch_average_loss) > 2.3 and not repaired:
+                if np.average(patch_average_loss) > 2.3 and not REPAIRED:
+                    detected_time = time.time()
                     self.repair_configuration(status_data)
-                    repaired = True
+                    repaired_time = time.time()
+                    REPAIRED = True
 
             except Exception as e:
                 logging.warning(f"{e}, then continue looping")

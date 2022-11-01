@@ -117,7 +117,7 @@ class GAOptimizer(DroneOptimizer):
                                  varTypes=varTypes, lb=lb, ub=ub, lbin=lbin, ubin=ubin)
 
     def start_optimize(self):
-        NINDs = 20
+        NINDs = 40
         Encoding = 'RI'  # 编码方式
         Field = ea.crtfld(Encoding, self.problem.varTypes, self.problem.ranges,
                           self.problem.borders)  # 创建区域描述器
@@ -125,7 +125,7 @@ class GAOptimizer(DroneOptimizer):
         # 自定义初始化的种群soea_DE_currentToBest_1_bin_templet
         """===============================算法参数设置============================="""
         self.algorithm = ea.soea_DE_currentToBest_1_bin_templet(self.problem, population)  # 实例化一个算法模板对象
-        self.algorithm.MAXGEN = 80  # 最大进化代数
+        self.algorithm.MAXGEN = 400  # 最大进化代数
         self.algorithm.mutOper.F = 0.7  # 差分进化中的参数F
         self.algorithm.recOper.XOVR = 0.7  # 重组概率
         self.algorithm.trappedValue = 0.1  # “进化停滞”判断阈值

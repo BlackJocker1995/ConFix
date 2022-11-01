@@ -326,13 +326,23 @@ class DroneMavlink(multiprocessing.Process):
                     logging.warning(f"Error processing {file} : {e}")
                     continue
 
-    def init_ulg_log_file(self):
-        log_path = f"{toolConfig.PX4_LOG_PATH}/*.ulg"
+    def init_ulg_log_file(self, device_i=None):
+        if device_i is None:
+            log_path = f"{toolConfig.PX4_LOG_PATH}/*.ulg"
 
-        list_of_files = glob.glob(log_path)  # * means all if need specific format then *.csv
-        latest_file = max(list_of_files, key=os.path.getctime)
-        self.log_file = latest_file
-        logging.info(f"Current log file: {latest_file}")
+            list_of_files = glob.glob(log_path)  # * means all if need specific format then *.csv
+            latest_file = max(list_of_files, key=os.path.getctime)
+            self.log_file = latest_file
+            logging.info(f"Current log file: {latest_file}")
+        else:
+            now = time.localtime()
+            now_time = time.strftime("%Y-%m-%d", now)
+            log_path = f"{toolConfig.PX4_RUN_PATH}/build/px4_sitl_default/instance_{device_i}/log/{now_time}/*.ulg"
+
+            list_of_files = glob.glob(log_path)  # * means all if need specific format then *.csv
+            latest_file = max(list_of_files, key=os.path.getctime)
+            self.log_file = latest_file
+            logging.info(f"Current log file: {latest_file}")
 
 
 class CollectMavlinkAPM(DroneMavlink):
@@ -1208,6 +1218,15 @@ class FlyFixMavlinkPX4(FlyFixMavlink):
         file = open(self.log_file, 'rb')
         repaired = False
         while True:
+            # Exist commands
+            if not self.recv_msg_queue.empty():
+                # receive error result
+                manager_msg, manager_msg_timestamp = self.recv_msg_queue.get()
+                # judge the system detect, repair this part.
+                detect_repair_result = sort_result_detect_repair(manager_msg_timestamp, detected_time, repaired_time)
+                return manager_msg, detect_repair_result
+
+
             time.sleep(1)
             # Flush write buffer
             file.flush()

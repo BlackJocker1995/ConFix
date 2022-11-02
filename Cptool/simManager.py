@@ -158,20 +158,9 @@ class SimManager:
 
         if toolConfig.MODE == toolConfig.MODE == 'PX4':
 
-            if os.path.exists(f"{toolConfig.PX4_RUN_PATH}/build/px4_sitl_default/tmp/rootfs/eeprom/parameters_10016") \
+            if os.path.exists(f"{toolConfig.PX4_RUN_PATH}/build/px4_sitl_default/instance_{drone_i}/eeprom/parameters_10016") \
                     and toolConfig.MODE == "PX4":
-                os.remove(f"{toolConfig.PX4_RUN_PATH}/build/px4_sitl_default/tmp/rootfs/eeprom/parameters_10016")
-
-            if toolConfig.HOME is None:
-                pre_argv = f"PX4_HOME_LAT=-35.362758 " \
-                           f"PX4_HOME_LON=149.165135 " \
-                           f"PX4_HOME_ALT=583.730592 " \
-                           f"PX4_SIM_SPEED_FACTOR={toolConfig.SPEED}"
-            else:
-                pre_argv = f"PX4_HOME_LAT=40.072842 " \
-                           f"PX4_HOME_LON=-105.230575 " \
-                           f"PX4_HOME_ALT=0.000000 " \
-                           f"PX4_SIM_SPEED_FACTOR={toolConfig.SPEED}"
+                os.remove(f"{toolConfig.PX4_RUN_PATH}/build/px4_sitl_default/instance_{drone_i}/parameters_10016")
 
             if toolConfig.SIM == 'Jmavsim':
                 cmd = f"{toolConfig.PX4_RUN_PATH}/Tools/sitl_multiple_run_single.sh {drone_i}"
@@ -286,10 +275,6 @@ class SimManager:
 
     def stop_sim(self):
         self._sim_task.sendcontrol('c')
-        while True:
-            line = self._sitl_task.readline()
-            if not line:
-                break
         self._sim_task.close(force=True)
         logging.info('Stop Sim task.')
 

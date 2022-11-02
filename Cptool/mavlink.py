@@ -326,24 +326,6 @@ class DroneMavlink(multiprocessing.Process):
                     logging.warning(f"Error processing {file} : {e}")
                     continue
 
-    def init_ulg_log_file(self, device_i=None):
-        if device_i is None:
-            log_path = f"{toolConfig.PX4_LOG_PATH}/*.ulg"
-
-            list_of_files = glob.glob(log_path)  # * means all if need specific format then *.csv
-            latest_file = max(list_of_files, key=os.path.getctime)
-            self.log_file = latest_file
-            logging.info(f"Current log file: {latest_file}")
-        else:
-            now = time.localtime()
-            now_time = time.strftime("%Y-%m-%d", now)
-            log_path = f"{toolConfig.PX4_RUN_PATH}/build/px4_sitl_default/instance_{device_i}/log/{now_time}/*.ulg"
-
-            list_of_files = glob.glob(log_path)  # * means all if need specific format then *.csv
-            latest_file = max(list_of_files, key=os.path.getctime)
-            self.log_file = latest_file
-            logging.info(f"Current log file: {latest_file}")
-
 
 class CollectMavlinkAPM(DroneMavlink):
     """
@@ -806,7 +788,7 @@ class FlyFixMavlink(DroneMavlink):
         logging.info(f"Repair configuration {new_config} and cost: {end - start} second")
         self.set_params(new_config)
 
-    def init_bin_log_file(self):
+    def init_binary_log_file(self, device_i=None):
         pass
 
     def init_current_param(self):
@@ -817,16 +799,6 @@ class FlyFixMavlinkAPM(FlyFixMavlink):
     def __init__(self, port, recv_msg_queue=None, send_msg_queue=None):
         super(FlyFixMavlinkAPM, self).__init__(port, recv_msg_queue, send_msg_queue)
 
-    def init_bin_log_file(self):
-        log_index = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/LASTLOG.TXT"
-        # Read last index
-        with open(log_index, 'r') as f:
-            num = int(f.readline()) + 1
-            # To string
-        num = f'{num}'
-        self.log_file = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/{num.rjust(8, '0')}.BIN"
-        logging.info(f"Current log file: {self.log_file}")
-
     def init_current_param(self):
         # inti param value
         accpet_param = load_param().columns.to_list()
@@ -836,6 +808,16 @@ class FlyFixMavlinkAPM(FlyFixMavlink):
                 self.param_current.update(CollectMavlinkAPM.log_extract_apm(msg))
         self.param_current.pop('TimeS')
         # logging.debug(f"Current parameters: {self.param_current}")
+
+    def init_binary_log_file(self):
+        log_index = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/LASTLOG.TXT"
+        # Read last index
+        with open(log_index, 'r') as f:
+            num = int(f.readline()) + 1
+            # To string
+        num = f'{num}'
+        self.log_file = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/{num.rjust(8, '0')}.BIN"
+        logging.info(f"Current log file: {self.log_file}")
 
     def read_status_patch_bin(self, time_last, time_unit: float):
         time_unit = float(time_unit)
@@ -1109,33 +1091,44 @@ class FlyFixMavlinkPX4(FlyFixMavlink):
     def __init__(self, port, recv_msg_queue=None, send_msg_queue=None):
         super(FlyFixMavlinkPX4, self).__init__(port, recv_msg_queue, send_msg_queue)
 
-    def init_bin_log_file(self):
-        log_path = f"{toolConfig.PX4_LOG_PATH}/*.ulg"
-
-        list_of_files = glob.glob(log_path)  # * means all if need specific format then *.csv
-        latest_file = max(list_of_files, key=os.path.getctime)
-
-        self.log_file = latest_file
-        logging.info(f"Current log file: {self.log_file}")
-
     def init_current_param(self):
         # inti param value
         param = pd.Series(self.flight_log.initial_parameters)
         # select parameters
         self.param_current = param[toolConfig.PARAM]
 
+    def init_binary_log_file(self, device_i=None):
+        if device_i is None:
+            log_path = f"{toolConfig.PX4_LOG_PATH}/*.ulg"
+
+            list_of_files = glob.glob(log_path)  # * means all if need specific format then *.csv
+            latest_file = max(list_of_files, key=os.path.getctime)
+            self.log_file = latest_file
+            logging.info(f"Current log file: {latest_file}")
+        else:
+            now = time.localtime()
+            now_time = time.strftime("%Y-%m-%d", now)
+            log_path = f"{toolConfig.PX4_RUN_PATH}/build/px4_sitl_default/instance_{device_i}/log/{now_time}/*.ulg"
+
+            list_of_files = glob.glob(log_path)  # * means all if need specific format then *.csv
+            latest_file = max(list_of_files, key=os.path.getctime)
+            self.log_file = latest_file
+            logging.info(f"Current log file: {latest_file}")
+
     def read_status_patch_ulg(self, time_last, time_unit: float):
         time_unit = float(time_unit)
 
         att = pd.DataFrame(self.flight_log.get_dataset('vehicle_attitude_setpoint').data)[["timestamp",
-                                                                                "roll_body", "pitch_body", "yaw_body"]]
+                                                                                           "roll_body", "pitch_body",
+                                                                                           "yaw_body"]]
         rate = pd.DataFrame(self.flight_log.get_dataset('vehicle_rates_setpoint').data)[["timestamp",
-                                                                          "roll", "pitch", "yaw"]]
+                                                                                         "roll", "pitch", "yaw"]]
         acc_gyr = pd.DataFrame(self.flight_log.get_dataset('sensor_combined').data)[["timestamp",
-                                                                      "gyro_rad[0]", "gyro_rad[1]", "gyro_rad[2]",
-                                                                      "accelerometer_m_s2[0]",
-                                                                      "accelerometer_m_s2[1]",
-                                                                      "accelerometer_m_s2[2]"]]
+                                                                                     "gyro_rad[0]", "gyro_rad[1]",
+                                                                                     "gyro_rad[2]",
+                                                                                     "accelerometer_m_s2[0]",
+                                                                                     "accelerometer_m_s2[1]",
+                                                                                     "accelerometer_m_s2[2]"]]
         mag = pd.DataFrame(self.flight_log.get_dataset('sensor_mag').data)[["timestamp", "x", "y", "z"]]
         vibe = pd.DataFrame(self.flight_log.get_dataset('sensor_accel').data)[["timestamp", "x", "y", "z"]]
 
@@ -1225,7 +1218,6 @@ class FlyFixMavlinkPX4(FlyFixMavlink):
                 # judge the system detect, repair this part.
                 detect_repair_result = sort_result_detect_repair(manager_msg_timestamp, detected_time, repaired_time)
                 return manager_msg, detect_repair_result
-
 
             time.sleep(1)
             # Flush write buffer

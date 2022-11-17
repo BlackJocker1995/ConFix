@@ -125,15 +125,15 @@ class GAOptimizer(DroneOptimizer):
         # 自定义初始化的种群soea_DE_currentToBest_1_bin_templet
         """===============================算法参数设置============================="""
         self.algorithm = ea.soea_DE_currentToBest_1_bin_templet(self.problem, population)  # 实例化一个算法模板对象
-        self.algorithm.MAXGEN = 400  # 最大进化代数
+        self.algorithm.MAXGEN = 80  # 最大进化代数
         self.algorithm.mutOper.F = 0.7  # 差分进化中的参数F
         self.algorithm.recOper.XOVR = 0.7  # 重组概率
         self.algorithm.trappedValue = 0.1  # “进化停滞”判断阈值
         self.algorithm.maxTrappedCount = 10  # 进化停滞计数器最大上限值，如果连续maxTrappedCount代被判定进化陷入停滞，则终止进化
         self.algorithm.drawing = 0  #
         """===========================根据先验知识创建先知种群======================="""
-        # prophetChrom = np.array(self.default_pop, dtype=int)  # 假设已知为一条比较优秀的染色体
-        prophetChrom = np.array(self.default_pop // self.step_unit, dtype=int)
+        # prophetChrom = np.array(self.default_pop // self.step_unit, dtype=int) # 假设已知为一条比较优秀的染色体
+        prophetChrom = np.array([self.start_value // self.step_unit], dtype=int)
         prophetPop = ea.Population(Encoding, Field, 1, prophetChrom)  # 实例化种群对象（设置个体数为1）
 
         self.algorithm.call_aimFunc(prophetPop)

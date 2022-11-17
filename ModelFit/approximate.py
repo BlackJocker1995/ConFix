@@ -21,7 +21,7 @@ from tensorflow.python.keras.models import load_model
 from tqdm import tqdm
 
 from Cptool.config import toolConfig
-from Cptool.mavtool import min_max_scaler_param, min_max_scaler, _systematicSampling
+from Cptool.mavtool import min_max_scaler, _systematicSampling
 
 
 class Modeling(object):
@@ -234,43 +234,44 @@ class Modeling(object):
         test = Y[col, :]
         patch_array_loss = patch_array_loss[col]
         # 'AccX', 'AccY', 'AccZ',
-        # for name, i in zip(['Roll', 'Pitch', 'Yaw', 'RateRoll', 'RatePitch', 'RateYaw', 'AccX', 'AccY', 'AccZ', 'GyrX', 'GyrY', 'GyrZ', 'MagX', 'MagY', 'MagZ'], range(15)):
-        #     x = predict_y[:, i]
-        #     y = test[:, i]
-        #
-        #     fig = plt.figure(figsize=(8, 5))
-        #     ax1 = plt.subplot()
-        #
-        #     ax2 = ax1.twinx()
-        #
-        #     ax1.plot(x, '-', label='Predicted', linewidth=2)
-        #     ax1.plot(y, '--', label='Real', linewidth=2)
-        #     ax1.set_xlabel("Timestamp", fontsize=18)
-        #
-        #     ax2.bar(np.arange(len(x)), np.abs(x - y), label='Error')
-        #     ax2.set_ylim([0, 10 * np.max(np.abs(x - y))])
-        #     if name in ['AccX', 'AccY', 'AccZ']:
-        #         ax1.set_ylabel(f'{name} (m/s/s)', fontsize=18)
-        #         ax2.set_ylabel('Error (m/s/s)', fontsize=18)
-        #     if name in ['RateRoll', 'RatePitch', 'RateYaw', 'GyrX', 'GyrY', 'GyrZ']:
-        #         ax1.set_ylabel(f'{name} (deg/s)', fontsize=18)
-        #         ax2.set_ylabel('Error (deg/s)', fontsize=18)
-        #     if name in ['Roll', 'Pitch', 'Yaw']:
-        #         ax1.set_ylabel(f'{name} (deg)', fontsize=18)
-        #         ax2.set_ylabel('Error (deg)', fontsize=18)
-        #     if name in ['MagX', 'MagY', 'MagZ']:
-        #         ax1.set_ylabel(f'{name} (gauss)', fontsize=18)
-        #         ax2.set_ylabel('Error (gauss)', fontsize=18)
-        #
-        #     fig.legend(loc='upper center', ncol=3, fontsize='18')
-        #     plt.setp(ax1.get_xticklabels(), fontsize=18)
-        #     plt.setp(ax2.get_yticklabels(), fontsize=18)
-        #     plt.setp(ax1.get_yticklabels(), fontsize=18)
-        #
-        #     plt.margins(0, 0)
-        #     # plt.gcf().subplots_adjust(bottom=0.12)
-        #     # plt.savefig(f'{os.getcwd()}/fig/{toolConfig.MODE}/{self.in_out}/{cmp_name}/{name.lower()}.{exec}')
-        #     plt.show()
+        for name, i in zip(['Roll', 'Pitch', 'Yaw', 'RateRoll', 'RatePitch', 'RateYaw', 'AccX', 'AccY', 'AccZ', 'GyrX', 'GyrY', 'GyrZ', 'MagX', 'MagY', 'MagZ'], range(15)):
+            x = predict_y[:, i]
+            y = test[:, i]
+
+            fig = plt.figure(figsize=(8, 5))
+            ax1 = plt.subplot()
+
+            ax2 = ax1.twinx()
+
+            ax1.plot(x, '-', label='Predicted', linewidth=2)
+            ax1.plot(y, '--', label='Real', linewidth=2)
+            ax1.set_xlabel("Timestamp", fontsize=18)
+
+            ax2.bar(np.arange(len(x)), np.abs(x - y), label='Error',color='tab:brown')
+            ax2.set_ylim([0, 10 * np.max(np.abs(x - y))])
+            if name in ['AccX', 'AccY', 'AccZ']:
+                ax1.set_ylabel(f'{name} (m/s/s)', fontsize=18)
+                ax2.set_ylabel('Error (m/s/s)', fontsize=18)
+            if name in ['RateRoll', 'RatePitch', 'RateYaw', 'GyrX', 'GyrY', 'GyrZ']:
+                ax1.set_ylabel(f'{name} (deg/s)', fontsize=18)
+                ax2.set_ylabel('Error (deg/s)', fontsize=18)
+            if name in ['Roll', 'Pitch', 'Yaw']:
+                ax1.set_ylabel(f'{name} (deg)', fontsize=18)
+                ax2.set_ylabel('Error (deg)', fontsize=18)
+            if name in ['MagX', 'MagY', 'MagZ']:
+                ax1.set_ylabel(f'{name} (gauss)', fontsize=18)
+                ax2.set_ylabel('Error (gauss)', fontsize=18)
+
+            fig.legend(loc='upper center', ncol=3, fontsize='18')
+            plt.setp(ax1.get_xticklabels(), fontsize=18)
+            plt.setp(ax2.get_yticklabels(), fontsize=18)
+            plt.setp(ax1.get_yticklabels(), fontsize=18)
+
+            plt.margins(0, 0)
+            # plt.gcf().subplots_adjust(bottom=0.12)
+            # plt.savefig(f'{os.getcwd()}/fig/{toolConfig.MODE}/{self.in_out}/{cmp_name}/{name.lower()}.{exec}')
+            plt.subplots_adjust(left=0.14,bottom=0.142,right=0.868,top=0.88,wspace=0.2,hspace=0.2)
+            plt.show()
 
         # Draw loss
         fig = plt.figure(figsize=(8, 5))
@@ -278,7 +279,7 @@ class Modeling(object):
         ax.bar(np.arange(len(patch_array_loss)), patch_array_loss, 1,label='Accumulated Deviation')
         ax.set_ylabel(f'Accumulated Deviation', fontsize=18)
         ax.set_xlabel(f'Timestamp', fontsize=18)
-        ax.set_ylim([0, 10])
+        ax.set_ylim([0, 25])
         plt.setp(ax.get_xticklabels(), fontsize=18)
         plt.setp(ax.get_yticklabels(), fontsize=18)
         fig.legend(loc='upper center', ncol=1, fontsize='18')

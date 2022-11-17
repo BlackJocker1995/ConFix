@@ -160,7 +160,7 @@ class SimManager:
 
             if os.path.exists(f"{toolConfig.PX4_RUN_PATH}/build/px4_sitl_default/instance_{drone_i}/eeprom/parameters_10016") \
                     and toolConfig.MODE == "PX4":
-                os.remove(f"{toolConfig.PX4_RUN_PATH}/build/px4_sitl_default/instance_{drone_i}/parameters_10016")
+                os.remove(f"{toolConfig.PX4_RUN_PATH}/build/px4_sitl_default/instance_{drone_i}/eeprom/parameters_10016")
 
             if toolConfig.SIM == 'Jmavsim':
                 cmd = f"{toolConfig.PX4_RUN_PATH}/Tools/sitl_multiple_run_single.sh {drone_i}"

@@ -18,7 +18,7 @@ def reject_outliers(data, m=2):
 
 if __name__ == '__main__':
     cylstm = CyTCN(100, 128)
-    feature = pd.read_csv(f"model/{toolConfig.MODE}/{toolConfig.INPUT_LEN}_{toolConfig.OUTPUT_LEN}/features.csv")
+    feature = pd.read_csv(f"model/{toolConfig.MODE}/{toolConfig.INPUT_LEN}_{toolConfig.OUTPUT_LEN}/features_change.csv")
     cylstm.read_model()
 
     feature_x, feature_y = cylstm.data_split(feature)

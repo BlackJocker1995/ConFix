@@ -4,12 +4,10 @@ import os
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
+from numpy.lib.stride_tricks import sliding_window_view
 from pymavlink import mavutil, mavwp, mavextra
 from Cptool.config import toolConfig
 import sys, select, os
-import datetime
-from timeit import default_timer as timer
-import signal
 
 
 class Location:
@@ -154,38 +152,91 @@ def _systematicSampling(dataMat, number):
     return out_index
 
 
-def draw_att_des_and_ach(pdarray, exec='pdf'):
-    index = _systematicSampling(pdarray, 150)
+def draw_att_des_and_ach_repair(pdarray, exec='pdf'):
+    index = _systematicSampling(pdarray, 500)
     pdarray = pdarray.iloc[index]
     # 'AccX', 'AccY', 'AccZ',
+
+    repair_line = 332
+
     for name in ['Roll', 'Pitch', 'Yaw']:
         x = pdarray[name].to_numpy()
         y = pdarray[f"Des{name}"].to_numpy()
+
+        loss = np.abs(x - y)
 
         fig = plt.figure(figsize=(8, 5))
         ax1 = plt.subplot()
 
         ax2 = ax1.twinx()
 
-        ax2.fill_betweenx([0, 10 * np.max(np.abs(x - y))], [68, 68],
-                          [len(x), len(x)], color="tomato", alpha=0.2, label="Error State")
+        ax2.fill_betweenx([0, 10 * np.max(loss)], [0, 0],
+                          [repair_line, repair_line], color="tomato", alpha=0.2, label="Unstale State")
+
+        ax2.fill_betweenx([0, 10 * np.max(np.abs(x - y))], [repair_line, repair_line],
+                          [len(x), len(x)], color="green", alpha=0.2, label="Repaired")
+
+        mid = np.sqrt(x.max() - x.min())
+
+        ax1.plot(y, '-', label='Achieved', linewidth=2)
+        ax1.plot(x, '--', label='Desired', linewidth=2)
+        ax1.set_xlabel("Timestamp", fontsize=18)
+        ax1.set_ylabel(f'{name} (deg)', fontsize=18)
+        ax1.annotate('Repair Upload', xy=(repair_line, x.min()+mid*0.5),
+                     xytext=(repair_line+pdarray.shape[0] * 0.1, x.min()+mid*0.5),
+                     arrowprops=dict(arrowstyle="->", color="r", hatch='*',), fontsize='16')
+
+        ax2.bar(np.arange(len(x)), loss, label='Error', color='tab:brown')
+        ax2.set_ylim([0, 10 * np.max(np.abs(x - y))])
+        ax2.set_ylabel('Error (deg)', fontsize=18)
+
+        fig.legend(loc='upper center', ncol=3, fontsize='18')
+        plt.setp(ax1.get_xticklabels(), fontsize=18)
+        plt.setp(ax2.get_yticklabels(), fontsize=18)
+        plt.setp(ax1.get_yticklabels(), fontsize=18)
+
+        plt.margins(0, 0)
+        plt.gcf().subplots_adjust(bottom=0.12)
+        # plt.savefig(f'{os.getcwd()}/fig/{toolConfig.MODE}/{self.in_out}/{cmp_name}/{name.lower()}.{exec}')
+        plt.subplots_adjust(left=0.125, bottom=0.132, right=0.88, top=0.79, wspace=0.2, hspace=0.2)
+        plt.show()
+        # plt.clf()
+
+
+def draw_att_des_and_ach(pdarray, exec='pdf'):
+    index = _systematicSampling(pdarray, 300)
+    pdarray = pdarray.iloc[index]
+    # 'AccX', 'AccY', 'AccZ',
+    for name in ['Roll', 'Pitch', 'Yaw']:
+        x = pdarray[name].to_numpy()
+        y = pdarray[f"Des{name}"].to_numpy()
+
+        loss = np.abs(x - y)
+
+        fig = plt.figure(figsize=(8, 5))
+        ax1 = plt.subplot()
+
+        ax2 = ax1.twinx()
+
+        ax2.fill_betweenx([0, 10 * np.max(np.abs(x - y))], [210, 210],
+                          [len(x), len(x)], color="tomato", alpha=0.2, label="Unstable")
 
         ax1.plot(y, '-', label='Achieved', linewidth=2)
         ax1.plot(x, '--', label='Desired', linewidth=2)
         ax1.set_xlabel("Timestamp", fontsize=18)
         ax1.set_ylabel(f'{name} (deg)', fontsize=18)
 
-        ax2.bar(np.arange(len(x)), np.abs(x - y), label='Error')
+        ax2.bar(np.arange(len(x)), loss, label='Error', color='tab:brown')
         ax2.set_ylim([0, 10 * np.max(np.abs(x - y))])
         ax2.set_ylabel('Error (deg)', fontsize=18)
 
-        fig.legend(loc='upper center', ncol=4, fontsize='18')
+        fig.legend(loc='upper center', ncol=2, fontsize='18')
         plt.setp(ax1.get_xticklabels(), fontsize=18)
         plt.setp(ax2.get_yticklabels(), fontsize=18)
         plt.setp(ax1.get_yticklabels(), fontsize=18)
 
         plt.margins(0, 0)
-        # # plt.gcf().subplots_adjust(bottom=0.12)
+        plt.gcf().subplots_adjust(bottom=0.12)
         # plt.savefig(f'{os.getcwd()}/fig/{toolConfig.MODE}/{self.in_out}/{cmp_name}/{name.lower()}.{exec}')
         plt.show()
         # plt.clf()

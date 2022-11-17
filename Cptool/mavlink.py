@@ -1023,6 +1023,8 @@ class FlyFixMavlinkAPM(FlyFixMavlink):
         repaired_time = 0
         # upload configuration
         REPAIRED = False
+        # fix time
+        FIX_TIME = 0
 
         while True:
             # Exist commands
@@ -1063,16 +1065,17 @@ class FlyFixMavlinkAPM(FlyFixMavlink):
                     predicted_feature = predicted_feature.reshape((predicted_feature.shape[0], -1))
                 # deviation loss
                 patch_array_loss = self.predictor.cal_patch_deviation(predicted_feature, feature_y)
-                patch_average_loss = np.average(patch_array_loss)
-                logging.info(f"Time {status_data['TimeS'].iloc[0].round(1)} status' patch average loss:"
-                             f" {patch_average_loss}")
+                patch_max_loss = np.max(patch_array_loss)
+                logging.info(f"Time {status_data['TimeS'].iloc[0].round(1)} status' segment max loss:"
+                             f" {patch_max_loss}")
 
                 # APM threshold 2.3
-                if np.average(patch_average_loss) > 2.3 and not REPAIRED:
+                if np.average(patch_max_loss) > 5.6 and not REPAIRED:#  and FIX_TIME < 2: # and not REPAIRED:
                     detected_time = time.time()
                     self.repair_configuration(status_data)
                     repaired_time = time.time()
                     REPAIRED = True
+                    # FIX_TIME = FIX_TIME + 1
 
             except Exception as e:
                 logging.warning(f"{e}, then continue looping")
@@ -1209,7 +1212,15 @@ class FlyFixMavlinkPX4(FlyFixMavlink):
     def online_ulg_monitor(self, pitch_size_s=3):
         time_last = 0
         file = open(self.log_file, 'rb')
-        repaired = False
+
+        # Flag
+        # detected
+        detected_time = 0
+        # created repair
+        repaired_time = 0
+        # upload configuration
+        REPAIRED = False
+
         while True:
             # Exist commands
             if not self.recv_msg_queue.empty():
@@ -1226,7 +1237,7 @@ class FlyFixMavlinkPX4(FlyFixMavlink):
             self.flight_log = ULog(self.log_file)
             # inti param value
             self.init_current_param()
-            try:
+            if True:
                 # Read flight status
                 status_data = self.read_status_patch_ulg(time_last, pitch_size_s)
                 # Check landed or read failure
@@ -1253,13 +1264,15 @@ class FlyFixMavlinkPX4(FlyFixMavlink):
                 logging.info(f"Time {status_data['TimeS'].iloc[0].round(1)} status' patch average loss:"
                              f" {patch_average_loss}")
 
-                # threshold
-                if np.average(patch_average_loss) > 9.2 and not repaired:
+                # PX4 threshold 2.06
+                if np.average(patch_average_loss) > 2.06 and not REPAIRED:
+                    detected_time = time.time()
                     self.repair_configuration(status_data)
-                    repaired = True
+                    repaired_time = time.time()
+                    REPAIRED = True
 
-            except Exception as e:
-                logging.warning(f"{e}, then continue looping")
+            # except Exception as e:
+            #     logging.warning(f"{e}, then continue looping")
 
             # Drop old message
             msg = self.flight_log.last_timestamp

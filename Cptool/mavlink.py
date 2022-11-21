@@ -1070,7 +1070,7 @@ class FlyFixMavlinkAPM(FlyFixMavlink):
                              f" {patch_max_loss}")
 
                 # APM threshold 2.3
-                if np.average(patch_max_loss) > 5.6 and not REPAIRED:#  and FIX_TIME < 2: # and not REPAIRED:
+                if np.average(patch_max_loss) > 2.3 and not REPAIRED:#  and FIX_TIME < 2: # and not REPAIRED:
                     detected_time = time.time()
                     self.repair_configuration(status_data)
                     repaired_time = time.time()

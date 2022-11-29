@@ -157,7 +157,7 @@ def draw_att_des_and_ach_repair(pdarray, exec='pdf'):
     pdarray = pdarray.iloc[index]
     # 'AccX', 'AccY', 'AccZ',
 
-    repair_line = 332
+    repair_line = 305 # real 332 ; thrust 305
 
     for name in ['Roll', 'Pitch', 'Yaw']:
         x = pdarray[name].to_numpy()
@@ -171,24 +171,24 @@ def draw_att_des_and_ach_repair(pdarray, exec='pdf'):
         ax2 = ax1.twinx()
 
         ax2.fill_betweenx([0, 10 * np.max(loss)], [0, 0],
-                          [repair_line, repair_line], color="tomato", alpha=0.2, label="Unstale State")
+                          [repair_line, repair_line], color="tomato", alpha=0.2, label="Unstable Area")
 
         ax2.fill_betweenx([0, 10 * np.max(np.abs(x - y))], [repair_line, repair_line],
-                          [len(x), len(x)], color="green", alpha=0.2, label="Repaired")
+                          [len(x), len(x)], color="green", alpha=0.2, label="Repaired Area")
 
         mid = np.sqrt(x.max() - x.min())
 
         ax1.plot(y, '-', label='Achieved', linewidth=2)
         ax1.plot(x, '--', label='Desired', linewidth=2)
-        ax1.set_xlabel("Timestamp", fontsize=18)
+        ax1.set_xlabel("Timestamp (0.1 Second)", fontsize=18)
         ax1.set_ylabel(f'{name} (deg)', fontsize=18)
         ax1.annotate('Repair Upload', xy=(repair_line, x.min()+mid*0.5),
                      xytext=(repair_line+pdarray.shape[0] * 0.1, x.min()+mid*0.5),
                      arrowprops=dict(arrowstyle="->", color="r", hatch='*',), fontsize='16')
 
-        ax2.bar(np.arange(len(x)), loss, label='Error', color='tab:brown')
+        ax2.bar(np.arange(len(x)), loss, label='Bias', color='tab:cyan')
         ax2.set_ylim([0, 10 * np.max(np.abs(x - y))])
-        ax2.set_ylabel('Error (deg)', fontsize=18)
+        ax2.set_ylabel('Bias (deg)', fontsize=18)
 
         fig.legend(loc='upper center', ncol=3, fontsize='18')
         plt.setp(ax1.get_xticklabels(), fontsize=18)
@@ -219,16 +219,16 @@ def draw_att_des_and_ach(pdarray, exec='pdf'):
         ax2 = ax1.twinx()
 
         ax2.fill_betweenx([0, 10 * np.max(np.abs(x - y))], [210, 210],
-                          [len(x), len(x)], color="tomato", alpha=0.2, label="Unstable")
+                          [len(x), len(x)], color="tomato", alpha=0.2, label="Unstable Area")
 
         ax1.plot(y, '-', label='Achieved', linewidth=2)
         ax1.plot(x, '--', label='Desired', linewidth=2)
-        ax1.set_xlabel("Timestamp", fontsize=18)
+        ax1.set_xlabel("Timestamp (0.1 Second)", fontsize=18)
         ax1.set_ylabel(f'{name} (deg)', fontsize=18)
 
-        ax2.bar(np.arange(len(x)), loss, label='Error', color='tab:brown')
+        ax2.bar(np.arange(len(x)), loss, label='Bias', color='tab:cyan')
         ax2.set_ylim([0, 10 * np.max(np.abs(x - y))])
-        ax2.set_ylabel('Error (deg)', fontsize=18)
+        ax2.set_ylabel('Bias (deg)', fontsize=18)
 
         fig.legend(loc='upper center', ncol=2, fontsize='18')
         plt.setp(ax1.get_xticklabels(), fontsize=18)

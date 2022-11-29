@@ -21,7 +21,7 @@ from tqdm import tqdm
 from Cptool.config import toolConfig
 from Cptool.mavtool import load_param, select_sub_dict, read_path_specified_file, Location, sort_result_detect_repair
 from ModelFit.approximate import CyLSTM, Modeling, CyTCN
-from optimize.optimizer import GAOptimizer, NelderGradient, BayesOptimizer, PSOOptimizer
+from optimize.optimizer import GAOptimizer
 
 
 class DroneMavlink(multiprocessing.Process):
@@ -1025,7 +1025,6 @@ class FlyFixMavlinkAPM(FlyFixMavlink):
         REPAIRED = False
         # fix time
         FIX_TIME = 0
-
         while True:
             # Exist commands
             if not self.recv_msg_queue.empty():

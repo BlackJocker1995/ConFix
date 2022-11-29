@@ -1,3 +1,5 @@
+import time
+
 import pandas as pd
 
 from Cptool.config import toolConfig
@@ -13,4 +15,7 @@ if __name__ == '__main__':
     # Train
     lstm.read_model()
 
+    s = time.time()
     lstm.test(feature, cuda=True)
+    e = time.time()
+    print(e-s)

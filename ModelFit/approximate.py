@@ -245,22 +245,22 @@ class Modeling(object):
 
             ax1.plot(x, '-', label='Predicted', linewidth=2)
             ax1.plot(y, '--', label='Real', linewidth=2)
-            ax1.set_xlabel("Timestamp", fontsize=18)
+            ax1.set_xlabel("Timestamp (0.1 Second)", fontsize=18)
 
-            ax2.bar(np.arange(len(x)), np.abs(x - y), label='Error',color='tab:brown')
+            ax2.bar(np.arange(len(x)), np.abs(x - y), label='Bias', color='tab:cyan')
             ax2.set_ylim([0, 10 * np.max(np.abs(x - y))])
             if name in ['AccX', 'AccY', 'AccZ']:
                 ax1.set_ylabel(f'{name} (m/s/s)', fontsize=18)
-                ax2.set_ylabel('Error (m/s/s)', fontsize=18)
+                ax2.set_ylabel('Bias (m/s/s)', fontsize=18)
             if name in ['RateRoll', 'RatePitch', 'RateYaw', 'GyrX', 'GyrY', 'GyrZ']:
                 ax1.set_ylabel(f'{name} (deg/s)', fontsize=18)
-                ax2.set_ylabel('Error (deg/s)', fontsize=18)
+                ax2.set_ylabel('Bias (deg/s)', fontsize=18)
             if name in ['Roll', 'Pitch', 'Yaw']:
                 ax1.set_ylabel(f'{name} (deg)', fontsize=18)
-                ax2.set_ylabel('Error (deg)', fontsize=18)
+                ax2.set_ylabel('Bias (deg)', fontsize=18)
             if name in ['MagX', 'MagY', 'MagZ']:
                 ax1.set_ylabel(f'{name} (gauss)', fontsize=18)
-                ax2.set_ylabel('Error (gauss)', fontsize=18)
+                ax2.set_ylabel('Bias (gauss)', fontsize=18)
 
             fig.legend(loc='upper center', ncol=3, fontsize='18')
             plt.setp(ax1.get_xticklabels(), fontsize=18)
@@ -276,9 +276,9 @@ class Modeling(object):
         # Draw loss
         fig = plt.figure(figsize=(8, 5))
         ax = plt.subplot()
-        ax.bar(np.arange(len(patch_array_loss)), patch_array_loss, 1,label='Accumulated Deviation')
+        ax.bar(np.arange(len(patch_array_loss)), patch_array_loss, 1, label='Accumulated Deviation', color='tab:brown')
         ax.set_ylabel(f'Accumulated Deviation', fontsize=18)
-        ax.set_xlabel(f'Timestamp', fontsize=18)
+        ax.set_xlabel(f'Timestamp (0.1 Second)', fontsize=18)
         ax.set_ylim([0, 25])
         plt.setp(ax.get_xticklabels(), fontsize=18)
         plt.setp(ax.get_yticklabels(), fontsize=18)
@@ -312,14 +312,14 @@ class Modeling(object):
                 ax1.set_ylabel(f'{name} (deg/s)', fontsize=18)
             if name in ['Roll', 'Pitch', 'Yaw']:
                 ax1.set_ylabel(f'{name} (deg)', fontsize=18)
-            ax2.bar(np.arange(len(x)), np.abs(x - y), label='Error')
+            ax2.bar(np.arange(len(x)), np.abs(x - y), label='Bias')
             ax2.set_ylim([0, 10 * np.max(np.abs(x - y))])
             if name in ['AccX', 'AccY', 'AccZ']:
-                ax2.set_ylabel('Error (m/s/s)', fontsize=18)
+                ax2.set_ylabel('Bias (m/s/s)', fontsize=18)
             if name in ['RateRoll', 'RatePitch', 'RateYaw']:
-                ax2.set_ylabel('Error (deg/s)', fontsize=18)
+                ax2.set_ylabel('Bias (deg/s)', fontsize=18)
             if name in ['Roll', 'Pitch', 'Yaw']:
-                ax2.set_ylabel('Error (deg)', fontsize=18)
+                ax2.set_ylabel('Bias (deg)', fontsize=18)
 
             fig.legend(loc='upper center', ncol=3, fontsize='18')
 
@@ -360,12 +360,11 @@ class Modeling(object):
         if not cuda:
             os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
         # load dataset
-        test_X, test_Y = self.data_split(test_data)
-
         start = time.time()
+        test_X, test_Y = self.data_split(test_data)
         self._model.predict(test_X)
         end = time.time()
-        logging.info("time cost:%.4f s" % (end - start))
+        logging.info("time cost:%.4f s / 1000" % ((end - start) / test_X.shape[0] * 1000))
         # Calculate score
         score = self._model.evaluate(test_X, test_Y, batch_size=256, verbose=1)
         return score[1]

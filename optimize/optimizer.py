@@ -4,13 +4,10 @@ from random import random
 import geatpy as ea
 import numpy as np
 import pandas as pd
-from bayes_opt import BayesianOptimization
-from gekko import GEKKO
 from keras.engine.sequential import Sequential
 from keras.legacy_tf_layers.core import Dense
 from keras.optimizers.optimizer_v2.adam import Adam
 from scipy.optimize import minimize
-from sko.PSO import PSO
 from Cptool.config import toolConfig
 from Cptool.mavtool import load_param, select_sub_dict, read_unit_from_dict, read_range_from_dict, get_default_values
 from ModelFit.approximate import CyLSTM
@@ -51,52 +48,52 @@ class DroneOptimizer:
         pass
 
 
-class NelderGradient(DroneOptimizer):
-    def __init__(self):
-        super(NelderGradient, self).__init__()
-        self.problem = ProblemFunLoss()
-
-    def start_optimize(self):
-        configuration = minimize(self.problem.function, self.start_value, bounds=self.param_bounds,
-                                 method='nelder-mead',
-                                 options={'xatol': 1e-2, 'disp': False, 'maxiter': 20})
-        configuration = self.problem.param_value2step(configuration.x)
-        return configuration
-
-
-class BayesOptimizer(DroneOptimizer):
-    def __init__(self):
-        super(BayesOptimizer, self).__init__()
-        self.problem = ProblemFunLoss()
-
-    def start_optimize(self):
-        bounds = pd.Series(self.param_bounds.tolist()).to_dict()
-        optimizer = BayesianOptimization(
-            f=self.problem.function,
-            pbounds=bounds,
-            verbose=2,
-            random_state=1,
-        )
-        optimizer.maximize(
-            init_points=20,
-            n_iter=20,
-        )
-        configuration = optimizer.max
-        return configuration
-
-
-class PSOOptimizer(DroneOptimizer):
-    def __init__(self):
-        super(PSOOptimizer, self).__init__()
-        self.problem = ProblemFunLoss()
-
-    def start_optimize(self):
-        pso = PSO(func=self.problem.function, n_dim=len(self.participle_param),
-                  pop=40, max_iter=20,
-                  lb=self.param_bounds[:, 0],
-                  ub=self.param_bounds[:, 1])
-        pso.run()
-
+# class NelderGradient(DroneOptimizer):
+#     def __init__(self):
+#         super(NelderGradient, self).__init__()
+#         self.problem = ProblemFunLoss()
+#
+#     def start_optimize(self):
+#         configuration = minimize(self.problem.function, self.start_value, bounds=self.param_bounds,
+#                                  method='nelder-mead',
+#                                  options={'xatol': 1e-2, 'disp': False, 'maxiter': 20})
+#         configuration = self.problem.param_value2step(configuration.x)
+#         return configuration
+#
+#
+# class BayesOptimizer(DroneOptimizer):
+#     def __init__(self):
+#         super(BayesOptimizer, self).__init__()
+#         self.problem = ProblemFunLoss()
+#
+#     def start_optimize(self):
+#         bounds = pd.Series(self.param_bounds.tolist()).to_dict()
+#         optimizer = BayesianOptimization(
+#             f=self.problem.function,
+#             pbounds=bounds,
+#             verbose=2,
+#             random_state=1,
+#         )
+#         optimizer.maximize(
+#             init_points=20,
+#             n_iter=20,
+#         )
+#         configuration = optimizer.max
+#         return configuration
+#
+#
+# class PSOOptimizer(DroneOptimizer):
+#     def __init__(self):
+#         super(PSOOptimizer, self).__init__()
+#         self.problem = ProblemFunLoss()
+#
+#     def start_optimize(self):
+#         pso = PSO(func=self.problem.function, n_dim=len(self.participle_param),
+#                   pop=40, max_iter=20,
+#                   lb=self.param_bounds[:, 0],
+#                   ub=self.param_bounds[:, 1])
+#         pso.run()
+#
 
 class GAOptimizer(DroneOptimizer):
     def __init__(self):

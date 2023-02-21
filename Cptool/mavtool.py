@@ -156,8 +156,11 @@ def draw_att_des_and_ach_repair(pdarray, exec='pdf'):
     index = _systematicSampling(pdarray, 500)
     pdarray = pdarray.iloc[index]
     # 'AccX', 'AccY', 'AccZ',
+    plt.rcParams['font.sans-serif']=['SimHei']
 
-    repair_line = 305 # real 332 ; thrust 305
+    plt.rcParams['axes.unicode_minus'] = False
+
+    repair_line = 332 # real 332 ; thrust 305
 
     for name in ['Roll', 'Pitch', 'Yaw']:
         x = pdarray[name].to_numpy()
@@ -171,24 +174,24 @@ def draw_att_des_and_ach_repair(pdarray, exec='pdf'):
         ax2 = ax1.twinx()
 
         ax2.fill_betweenx([0, 10 * np.max(loss)], [0, 0],
-                          [repair_line, repair_line], color="tomato", alpha=0.2, label="Unstable Area")
+                          [repair_line, repair_line], color="tomato", alpha=0.2, label="不稳定区域")
 
         ax2.fill_betweenx([0, 10 * np.max(np.abs(x - y))], [repair_line, repair_line],
-                          [len(x), len(x)], color="green", alpha=0.2, label="Repaired Area")
+                          [len(x), len(x)], color="green", alpha=0.2, label="被修复的区域")
 
         mid = np.sqrt(x.max() - x.min())
 
-        ax1.plot(y, '-', label='Achieved', linewidth=2)
-        ax1.plot(x, '--', label='Desired', linewidth=2)
-        ax1.set_xlabel("Timestamp (0.1 Second)", fontsize=18)
+        ax1.plot(y, '-', label='实现的', linewidth=2)
+        ax1.plot(x, '--', label='期望的', linewidth=2)
+        ax1.set_xlabel("时间戳 (0.1 秒)", fontsize=18)
         ax1.set_ylabel(f'{name} (deg)', fontsize=18)
-        ax1.annotate('Repair Upload', xy=(repair_line, x.min()+mid*0.5),
+        ax1.annotate('整改上传', xy=(repair_line, x.min()+mid*0.5),
                      xytext=(repair_line+pdarray.shape[0] * 0.1, x.min()+mid*0.5),
                      arrowprops=dict(arrowstyle="->", color="r", hatch='*',), fontsize='16')
 
-        ax2.bar(np.arange(len(x)), loss, label='Bias', color='tab:cyan')
+        ax2.bar(np.arange(len(x)), loss, label='差距', color='tab:cyan')
         ax2.set_ylim([0, 10 * np.max(np.abs(x - y))])
-        ax2.set_ylabel('Bias (deg)', fontsize=18)
+        ax2.set_ylabel('差距 （deg）', fontsize=18)
 
         fig.legend(loc='upper center', ncol=3, fontsize='18')
         plt.setp(ax1.get_xticklabels(), fontsize=18)

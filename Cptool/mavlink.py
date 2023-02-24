@@ -289,10 +289,16 @@ class DroneMavlink(multiprocessing.Process):
         """
 
         # If px4, the log is ulg, if ardupilot the log is bin
+        global collect_mavlink
         if toolConfig.MODE == "PX4":
-            file_list = read_path_specified_file(log_path, 'ulg')
+            collect_mavlink = CollectMavlinkAPM
+            bin_type = "ulg"
         else:
-            file_list = read_path_specified_file(log_path, 'BIN')
+            bin_type = "BIN"
+
+        # read file first
+        file_list = read_path_specified_file(log_path, bin_type)
+
         if not os.path.exists(f"{log_path}/csv"):
             os.makedirs(f"{log_path}/csv")
 
@@ -303,10 +309,7 @@ class DroneMavlink(multiprocessing.Process):
             ray.init(include_dashboard=True, dashboard_host="127.0.0.1", dashboard_port=8088)
 
             for array in arrays:
-                if toolConfig.MODE == "PX4":
-                    threat_manage.append(CollectMavlinkPX4.extract_log_path_threat.remote(log_path, array, skip))
-                else:
-                    threat_manage.append(CollectMavlinkAPM.extract_log_path_threat.remote(log_path, array, skip))
+                threat_manage.append(collect_mavlink.extract_log_path_threat.remote(log_path, array, skip))
             ray.get(threat_manage)
             ray.shutdown()
         else:
@@ -317,10 +320,7 @@ class DroneMavlink(multiprocessing.Process):
                     continue
                 # extract
                 try:
-                    if toolConfig.MODE == "PX4":
-                        csv_data = CollectMavlinkPX4.extract_log_file(log_path + f'/{file}')
-                    else:
-                        csv_data = CollectMavlinkAPM.extract_log_file(log_path + f'/{file}')
+                    csv_data = collect_mavlink.extract_log_file(log_path + f'/{file}')
                     csv_data.to_csv(f'{log_path}/csv/{name}.csv', index=False)
                 except Exception as e:
                     logging.warning(f"Error processing {file} : {e}")

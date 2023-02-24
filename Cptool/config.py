@@ -18,7 +18,7 @@ class ToolConfig:
         self.__dict__["MODE"] = None
 
         # Simulation Speed
-        self.__dict__["SPEED"] = 3
+        self.__dict__["SPEED"] = 1
         # Flight home (None, AVC_plane)
         self.__dict__["HOME"] = "AVC_plane"  # "AVC_plane"
         # Output Debug Message

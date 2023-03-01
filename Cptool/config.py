@@ -18,7 +18,7 @@ class ToolConfig:
         self.__dict__["MODE"] = None
 
         # Simulation Speed
-        self.__dict__["SPEED"] = 1
+        self.__dict__["SPEED"] = 3
         # Flight home (None, AVC_plane)
         self.__dict__["HOME"] = "AVC_plane"  # "AVC_plane"
         # Output Debug Message
@@ -95,18 +95,18 @@ class ToolConfig:
                 "ATC_ANG_RLL_P",
                 "ATC_RAT_RLL_P",
                 "ATC_RAT_RLL_I",
-                "ATC_RAT_RLL_D",
-                "ATC_ANG_PIT_P",
-                "ATC_RAT_PIT_P",
-                "ATC_RAT_PIT_I",
-                "ATC_RAT_PIT_D",
-                "ATC_ANG_YAW_P",
-                "ATC_RAT_YAW_P",
-                "ATC_RAT_YAW_I",
-                "ATC_RAT_YAW_D",
-                "WPNAV_SPEED",
-                "WPNAV_ACCEL",
-                "ANGLE_MAX"
+                # "ATC_RAT_RLL_D",
+                # "ATC_ANG_PIT_P",
+                # "ATC_RAT_PIT_P",
+                # "ATC_RAT_PIT_I",
+                # "ATC_RAT_PIT_D",
+                # "ATC_ANG_YAW_P",
+                # "ATC_RAT_YAW_P",
+                # "ATC_RAT_YAW_I",
+                # "ATC_RAT_YAW_D",
+                # "WPNAV_SPEED",
+                # "WPNAV_ACCEL",
+                # "ANGLE_MAX"
             ]
 
             # self.__dict__["PARAM"] = [

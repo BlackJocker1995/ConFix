@@ -448,10 +448,15 @@ class Modeling(object):
         #     predicted_data = predicted_data.reshape([predicted_data.shape[0], predicted_data.shape[2]])
         #     status_data = status_data.reshape([status_data.shape[0], status_data.shape[2]])
         deviation = np.abs(status_data - predicted_data)
+
         if len(predicted_data.shape) == 3:
+            if deviation.shape[1] < toolConfig.SEGMENT_LEN:
+                return deviation.sum()
             sliding_patch = sliding_window_view(deviation, toolConfig.SEGMENT_LEN, axis=1).astype(dtype=np.double)
             loss = sliding_patch.sum(axis=tuple(range(2, 4)))
         else:
+            if deviation.shape[0] < toolConfig.SEGMENT_LEN:
+                return deviation.sum()
             sliding_patch = sliding_window_view(deviation, toolConfig.SEGMENT_LEN, axis=0).astype(dtype=np.double)
             loss = sliding_patch.sum(axis=1).sum(axis=1)
         # predicted_data = sliding_window_view(predicted_data, 6, axis=0).astype(dtype=np.double)

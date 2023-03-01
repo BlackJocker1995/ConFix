@@ -165,3 +165,78 @@ class ProblemGA(ea.Problem, Problem):
         np_config = param * self.step
         np_config = pd.DataFrame(np_config, columns=toolConfig.PARAM_PART)
         return np_config
+
+
+class ProblemPSO(Problem):
+    def __init__(self, name):
+       self.name = name
+
+    def param_value2pd_single(self, configuration):
+        np_config = (configuration // self.step) * self.step
+        # keep 2D
+        if len(np_config.shape) == 1:
+            np_config = np_config.reshape(1, -1)
+        np_config = pd.DataFrame(np_config, columns=toolConfig.PARAM_PART)
+        return np_config.iloc[0].to_dict()
+
+    def param_value2pd_muilt(self, configuration):
+        np_config = (configuration // self.step) * self.step
+        return pd.DataFrame(np_config, columns=toolConfig.PARAM_PART)
+
+    def function(self, configuration):
+        configuration = self.param_value2step(configuration)
+        logging.debug(f"Optimizer configuration: {configuration}")
+        # replace parameter value
+        self.status_data[list(configuration.keys())] = list(configuration.values())
+        # status data to feature data
+        feature_data = self.predictor.status2feature(self.status_data)
+        # create predicted status of this status patch
+        feature_x, feature_y = self.predictor.data_split(feature_data)
+        if isinstance(self.predictor, CyTCN):
+            feature_y = feature_y.reshape((feature_y.shape[0], -1))
+            # Predict
+            predicted_feature = self.predictor.predict_feature(feature_x)
+            predicted_feature = predicted_feature.reshape((predicted_feature.shape[0], -1))
+        else:
+            # Predict
+            predicted_feature = self.predictor.predict_feature(feature_x)
+
+        # deviation loss
+        patch_array_loss = self.predictor.cal_patch_deviation(predicted_feature, feature_y)
+
+        patch_sum_loss = np.sum(patch_array_loss)
+        print(f"{patch_sum_loss}")
+        return patch_sum_loss
+
+    def function_swarm(self, configuration):
+        configuration = self.param_value2pd_muilt(configuration)
+        logging.debug(f"Optimizer configuration: {configuration}")
+
+        # repeat data
+        repeat_status = pd.concat([self.status_data] * configuration.shape[0]).reset_index(drop=True)
+        repeat_param = pd.DataFrame(np.repeat(configuration.values, self.status_data.shape[0], axis=0),
+                                    columns=configuration.columns)
+        repeat_status[toolConfig.PARAM_PART] = repeat_param
+
+        status_step = self.status_data.shape[0]
+        feature_step = self.status_data.shape[0] - toolConfig.INPUT_LEN
+        feature = pd.DataFrame()
+        for i in range(configuration.shape[0]):
+            status_index = i * status_step
+            feature_index = i * feature_step
+            tmp_status = repeat_status.iloc[status_index:status_index + status_step]
+            # status data to feature data
+            tmp_feature_data = self.predictor.status2feature(tmp_status)
+            feature = pd.concat([feature, tmp_feature_data])
+        # create predicted status of this status patch
+        feature_x, feature_y = self.predictor.data_split(feature)
+        # Predict
+        predicted_feature = self.predictor.predict_feature(feature_x)
+        # reshape to 3D (x number, status patch)
+        predicted_feature = predicted_feature.reshape((configuration.shape[0], -1, predicted_feature.shape[-1]))
+        feature_y = feature_y.reshape((configuration.shape[0], -1, predicted_feature.shape[-1]))
+        # deviation loss
+        patch_array_loss = self.predictor.cal_patch_deviation(predicted_feature, feature_y)
+
+        patch_sum_loss = np.sum(patch_array_loss, axis=1)
+        return patch_sum_loss

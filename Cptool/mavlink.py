@@ -21,7 +21,7 @@ from tqdm import tqdm
 from Cptool.config import toolConfig
 from Cptool.mavtool import load_param, select_sub_dict, read_path_specified_file, Location, sort_result_detect_repair
 from ModelFit.approximate import CyLSTM, Modeling, CyTCN
-from optimize.optimizer import GAOptimizer
+from optimize.optimizer import GAOptimizer, PSOOptimizer, SwarmOptimizer
 
 
 class DroneMavlink(multiprocessing.Process):
@@ -398,6 +398,13 @@ class CollectMavlinkAPM(DroneMavlink):
                 'TimeS': msg.TimeUS / 1000000,
                 msg.Name: msg.Value
             }
+        elif msg.get_type() == 'GPS':
+            out = {
+                'TimeS': msg.TimeUS / 1000000,
+                'Lat': msg.Lat,
+                'Lng': msg.Lng,
+                'Alt': msg.Alt,
+            }
         return out
 
     @staticmethod
@@ -462,6 +469,29 @@ class CollectMavlinkAPM(DroneMavlink):
         pd_array = pd.DataFrame(out_data)
         # Switch sequence, fill,  and return
         pd_array = CollectMavlinkAPM.fill_and_process_pd_log(pd_array)
+        return pd_array
+
+    @staticmethod
+    def extract_gps_file(log_file):
+        """
+        extract gps message form a bin file.
+        :param log_file:
+        :return:
+        """
+
+        logs = mavutil.mavlink_connection(log_file)
+        # init
+        out_data = []
+
+        while True:
+            msg = logs.recv_match(type=["GPS"])
+            if msg is None:
+                break
+            out_data.append(CollectMavlinkAPM.log_extract_apm(msg))
+        pd_array = pd.DataFrame(out_data)
+        # Switch sequence, fill,  and return
+        pd_array['TimeS'] = pd_array['TimeS'].round(1)
+        # pd_array = pd_array.drop_duplicates(keep='first')
         return pd_array
 
     @staticmethod
@@ -779,13 +809,13 @@ class FlyFixMavlink(DroneMavlink):
     def repair_configuration(self, status_data):
         logging.info("Start repair with parameter")
         start = time.time()
-        optimize = GAOptimizer()
+        optimize = SwarmOptimizer()
         optimize.set_status(status_data)
         optimize.set_predictor(self.predictor)
         optimize.set_bounds()
         new_config = optimize.start_optimize()
         end = time.time()
-        logging.info(f"Repair configuration {new_config} and cost: {end - start} second")
+        logging.info(f"Repair configuration found and cost: {end - start} second")
         self.set_params(new_config)
 
     def init_binary_log_file(self, device_i=None):
@@ -1056,12 +1086,16 @@ class FlyFixMavlinkAPM(FlyFixMavlink):
                 feature_data = self.predictor.status2feature(status_data)
                 # create predicted status of this status patch
                 feature_x, feature_y = self.predictor.data_split(feature_data)
+
+                # Predict
                 if isinstance(self.predictor, CyTCN):
                     feature_y = feature_y.reshape((feature_y.shape[0], -1))
-                # Predict
-                predicted_feature = self.predictor.predict_feature(feature_x)
-                if isinstance(self.predictor, CyTCN):
+                    predicted_feature = self.predictor.predict_feature(feature_x)
+
                     predicted_feature = predicted_feature.reshape((predicted_feature.shape[0], -1))
+                else:
+                    predicted_feature = self.predictor.predict_feature(feature_x)
+
                 # deviation loss
                 patch_array_loss = self.predictor.cal_patch_deviation(predicted_feature, feature_y)
                 patch_max_loss = np.max(patch_array_loss)

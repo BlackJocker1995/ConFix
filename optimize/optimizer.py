@@ -4,14 +4,16 @@ from random import random
 import geatpy as ea
 import numpy as np
 import pandas as pd
+import pyswarms as ps
 from keras.engine.sequential import Sequential
 from keras.legacy_tf_layers.core import Dense
 from keras.optimizers.optimizer_v2.adam import Adam
-from scipy.optimize import minimize
+from sko.PSO import PSO
+
 from Cptool.config import toolConfig
 from Cptool.mavtool import load_param, select_sub_dict, read_unit_from_dict, read_range_from_dict, get_default_values
 from ModelFit.approximate import CyLSTM
-from optimize.problem import Problem, ProblemFunLoss, ProblemGA, ProblemDQN
+from optimize.problem import Problem, ProblemGA, ProblemDQN, ProblemPSO
 
 
 class DroneOptimizer:
@@ -48,53 +50,6 @@ class DroneOptimizer:
         pass
 
 
-# class NelderGradient(DroneOptimizer):
-#     def __init__(self):
-#         super(NelderGradient, self).__init__()
-#         self.problem = ProblemFunLoss()
-#
-#     def start_optimize(self):
-#         configuration = minimize(self.problem.function, self.start_value, bounds=self.param_bounds,
-#                                  method='nelder-mead',
-#                                  options={'xatol': 1e-2, 'disp': False, 'maxiter': 20})
-#         configuration = self.problem.param_value2step(configuration.x)
-#         return configuration
-#
-#
-# class BayesOptimizer(DroneOptimizer):
-#     def __init__(self):
-#         super(BayesOptimizer, self).__init__()
-#         self.problem = ProblemFunLoss()
-#
-#     def start_optimize(self):
-#         bounds = pd.Series(self.param_bounds.tolist()).to_dict()
-#         optimizer = BayesianOptimization(
-#             f=self.problem.function,
-#             pbounds=bounds,
-#             verbose=2,
-#             random_state=1,
-#         )
-#         optimizer.maximize(
-#             init_points=20,
-#             n_iter=20,
-#         )
-#         configuration = optimizer.max
-#         return configuration
-#
-#
-# class PSOOptimizer(DroneOptimizer):
-#     def __init__(self):
-#         super(PSOOptimizer, self).__init__()
-#         self.problem = ProblemFunLoss()
-#
-#     def start_optimize(self):
-#         pso = PSO(func=self.problem.function, n_dim=len(self.participle_param),
-#                   pop=40, max_iter=20,
-#                   lb=self.param_bounds[:, 0],
-#                   ub=self.param_bounds[:, 1])
-#         pso.run()
-#
-
 class GAOptimizer(DroneOptimizer):
     def __init__(self):
         super(GAOptimizer, self).__init__()
@@ -104,10 +59,10 @@ class GAOptimizer(DroneOptimizer):
         maxormins = [1]  # 初始化maxormins（目标最小最大化标记列表，1：最小化该目标；-1：最大化该目标）
         Dim = self.sub_value_range.shape[0]  # 初始化Dim（决策变量维数）
         varTypes = [1] * Dim  # 初始化varTypes（决策变量的类型，元素为0表示对应的变量是连续的；1表示是离散的）
-        lb = self.sub_value_range[:, 0] // self.step_unit  # 决策变量下界
-        ub = self.sub_value_range[:, 1] // self.step_unit  # 决策变量上界
-        lbin = [1] * Dim  # 决策变量下边界（0表示不包含该变量的下边界，1表示包含）
-        ubin = [1] * Dim  # 决策变量上边界（0表示不包含该变量的上边界，1表示包含）
+        lb = self.sub_value_range[:, 0] // self.step_unit  # Lower bound for decision variables
+        ub = self.sub_value_range[:, 1] // self.step_unit  # Upper bound for decision variables
+        lbin = [1] * Dim  # Include lower bound
+        ubin = [1] * Dim  # Include upper bound
 
         # 调用父类构造方法完成实例化
         self.problem = ProblemGA(name=name, M=M, maxormins=maxormins, Dim=self.sub_value_range.shape[0],
@@ -153,6 +108,51 @@ class GAOptimizer(DroneOptimizer):
         return self.problem.param_value2step(candidate_obj)
 
 
+class PSOOptimizer(DroneOptimizer):
+    def __init__(self):
+        super().__init__()
+
+        name = 'PSOProblem'
+        self.lb = self.sub_value_range[:, 0]  # Lower bound for decision variables
+        self.ub = self.sub_value_range[:, 1]  # Upper bound for decision variables
+        self.dim = self.sub_value_range.shape[0]  # 初始化Dim（决策变量维数）
+
+        self.problem = ProblemPSO(name)
+
+    def start_optimize(self):
+        self.pso = PSO(func=self.problem.function, n_dim=self.dim, pop=20, max_iter=20,
+                       lb=self.lb, ub=self.ub, w=0.8, c1=0.6, c2=0.6)
+        self.pso.run()
+        print('best_x is ', self.pso.gbest_x, 'best_y is', self.pso.gbest_y)
+
+
+class SwarmOptimizer(DroneOptimizer):
+    def __init__(self):
+        super().__init__()
+
+        name = 'SwarmProblem'
+        self.lb = self.sub_value_range[:, 0] - 0.1  # Lower bound for decision variables
+        self.ub = self.sub_value_range[:, 1] + 0.1 # Upper bound for decision variables
+        self.dim = self.sub_value_range.shape[0]  # 初始化Dim（决策变量维数）
+
+        self.problem = ProblemPSO(name)
+
+    def start_optimize(self, init_pos=False):
+        pop = 20  # Population Size
+        options = {'c1': 0.7, 'c2': 0.7, 'w': 0.8}
+        if init_pos:
+            optimizer = ps.single.GlobalBestPSO(n_particles=pop, dimensions=self.dim,
+                                            options=options, bounds=(self.lb, self.ub),
+                                            init_pos=np.repeat(self.start_value.reshape(1, -1), pop, axis=0))
+        else:
+            optimizer = ps.single.GlobalBestPSO(n_particles=pop, dimensions=self.dim,
+                                                options=options, bounds=(self.lb, self.ub))
+        # Perform optimization
+        best_cost, best_pos = optimizer.optimize(self.problem.function_swarm, verbose=False, iters=30)
+        best_pos = pd.DataFrame(best_pos.reshape(1,-1), columns=toolConfig.PARAM_PART)
+        return best_pos
+
+
 class DQNOptimizer(DroneOptimizer):
     def __init__(self, state_size, action_size):
         super(DQNOptimizer, self).__init__(state_size, action_size)
@@ -160,7 +160,7 @@ class DQNOptimizer(DroneOptimizer):
         self.state_size = state_size
         self.action_size = action_size
         self.memory = deque(maxlen=2000)
-        self.gamma = 0.95    # discount rate
+        self.gamma = 0.95  # discount rate
         self.epsilon = 1.0  # exploration rate
         self.epsilon_min = 0.01
         self.epsilon_decay = 0.995

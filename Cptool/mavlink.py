@@ -1,14 +1,11 @@
-import json
 import logging
-import math
+import glob
+import logging
 import multiprocessing
 import os
 import random
 import time
-
-import glob
 from abc import abstractmethod
-from multiprocessing import Process
 
 import numpy as np
 import pandas as pd
@@ -20,9 +17,9 @@ from pyulog import ULog
 from tqdm import tqdm
 
 from Cptool.config import toolConfig
-from Cptool.mavtool import load_param, select_sub_dict, read_path_specified_file, Location, sort_result_detect_repair
-from ModelFit.approximate import CyLSTM, Modeling, CyTCN
-from optimize.optimizer import GAOptimizer, PSOOptimizer, SwarmOptimizer
+from Cptool.mavtool import load_param, select_sub_dict, read_path_specified_file, sort_result_detect_repair
+from ModelFit.approximate import Modeling, CyTCN
+from optimize.optimizer import SwarmOptimizer
 
 
 class DroneMavlink(multiprocessing.Process):
@@ -247,15 +244,44 @@ class DroneMavlink(multiprocessing.Process):
         logging.debug(f"Home set callback: {msg.command}")
 
     def gcs_msg_request(self):
-        self._master.mav.heartbeat_send(mavutil.mavlink.MAV_TYPE_GCS,
-                                        mavutil.mavlink.MAV_AUTOPILOT_INVALID, 0, 0, 0)
+        # If it requires manually send the gsc packets.
+        pass
 
-    def wait_complete(self):
+    def wait_complete(self, remain_fail=False, timeout=60 * 5):
         """
-        abstract
+        Wait the flight mission complete
+        :param remain_fail:
+        :param timeout:
         :return:
         """
-        pass
+        try:
+            timeout_start = time.time()
+            while time.time() < timeout_start + timeout:
+                # PX4 will manually send the heartbeat for GCS
+                self.gcs_msg_request()
+                message = self._master.recv_match(type=['STATUSTEXT'], blocking=True, timeout=30)
+                if message is None:
+                    continue
+                message = message.to_dict()
+                line = message['text']
+                if message["severity"] == 6:
+                    if "Land" in line:
+                        # if successful landed, break the loop and return true
+                        logging.info(f"Successful break the loop.")
+                        return True
+                elif message["severity"] == 2 or message["severity"] == 0:
+                    # Appear error, break loop and return false
+                    if "PreArm" in line or remain_fail:
+                        # "PreArm" failure will not generate log file, so it not need to delete log
+                        # remain_fail means keep this log
+                        logging.info(f"Get error with {message['text']}")
+                        return True
+                    return False
+        except (TimeoutError, KeyboardInterrupt) as e:
+            # Mission point time out, change other params
+            logging.warning(f'Wp timeout! or Key bordInterrupt! exit: {e}')
+            return False
+        return False
 
     """
     Internal Methods
@@ -297,6 +323,7 @@ class DroneMavlink(multiprocessing.Process):
     """
     Static method
     """
+
     @staticmethod
     def create_random_params(param_choice):
         para_dict = load_param()
@@ -384,7 +411,10 @@ class CollectMavlinkAPM(DroneMavlink):
     def __init__(self, port, recv_msg_queue, send_msg_queue):
         super(CollectMavlinkAPM, self).__init__(port, recv_msg_queue, send_msg_queue)
 
-    # Ardupilot
+    """
+    Static Method
+    """
+
     @staticmethod
     def log_extract_apm(msg: DFMessage, keep_des=False):
         """
@@ -397,11 +427,11 @@ class CollectMavlinkAPM(DroneMavlink):
         if msg.get_type() == 'ATT':
             # if len(toolConfig.LOG_MAP):
             if not keep_des:
-                 out = {
-                        'TimeS': msg.TimeUS / 1000000,
-                        'Roll': msg.Roll,
-                        'Pitch': msg.Pitch,
-                        'Yaw': msg.Yaw,
+                out = {
+                    'TimeS': msg.TimeUS / 1000000,
+                    'Roll': msg.Roll,
+                    'Pitch': msg.Pitch,
+                    'Yaw': msg.Yaw,
                 }
             else:
                 out = {
@@ -513,20 +543,14 @@ class CollectMavlinkAPM(DroneMavlink):
             msg = logs.recv_match(type=accept_item)
             if msg is None:
                 break
-            if msg.get_type() in ['ATT', 'RATE']:
-                out_data.append(CollectMavlinkAPM.log_extract_apm(msg, keep_des))
-            elif msg.get_type() in ['IMU', 'MAG']:
-                if hasattr(msg, "I") and msg.I == 0:
-                    out_data.append(CollectMavlinkAPM.log_extract_apm(msg, keep_des))
-                else:
-                    out_data.append(CollectMavlinkAPM.log_extract_apm(msg, keep_des))
-            elif msg.get_type() == 'VIBE':
-                if hasattr(msg, "IMU") and msg.IMU == 0:
-                    out_data.append(CollectMavlinkAPM.log_extract_apm(msg, keep_des))
-                else:
-                    out_data.append(CollectMavlinkAPM.log_extract_apm(msg, keep_des))
-            elif msg.get_type() == 'PARM' and msg.Name in accpet_param:
-                out_data.append(CollectMavlinkAPM.log_extract_apm(msg, keep_des))
+            # Skip if not index 0 sensor
+            # SKip is param is not we want
+            if (hasattr(msg, "I") and msg.I != 0) or \
+                    (hasattr(msg, "IMU") and msg.IMU != 0) or \
+                    (msg.get_type() == 'PARM' and msg.Name not in accpet_param):
+                continue
+            # Otherwise Record
+            out_data.append(CollectMavlinkAPM.log_extract_apm(msg, keep_des))
         pd_array = pd.DataFrame(out_data)
         # Switch sequence, fill,  and return
         pd_array = CollectMavlinkAPM.fill_and_process_pd_log(pd_array)
@@ -645,50 +669,9 @@ class CollectMavlinkAPM(DroneMavlink):
             with open(log_index, 'w') as f:
                 f.write(last_num)
 
-    def wait_complete(self, remain_fail=False, timeout=60 * 5):
-        if not self._master:
-            raise ValueError('Connect at first!')
-        try:
-            timeout_start = time.time()
-            while time.time() < timeout_start + timeout:
-                message = self._master.recv_match(type=['STATUSTEXT'], blocking=True, timeout=30)
-                if message is None:
-                    continue
-                message = message.to_dict()
-                out_msg = "None"
-                line = message['text']
-                if message["severity"] == 6:
-                    if "Land" in line:
-                        # if successful landed, break the loop and return true
-                        logging.info(f"Successful break the loop.")
-                        return True
-                elif message["severity"] == 2 or message["severity"] == 0:
-                    # Appear error, break loop and return false
-                    if "SIM Hit ground at" in line:
-                        pass
-                    elif "Potential Thrust Loss" in line:
-                        pass
-                    elif "Crash" in line:
-                        pass
-                    elif "PreArm" in line:
-                        pass
-                        # will not generate log file
-                        logging.info(f"Get error with {message['text']}")
-                        return True
-                    logging.info(f"Get error with {message['text']}")
-                    if remain_fail:
-                        # Keep problem log
-                        return True
-                    else:
-                        return False
-        except TimeoutError:
-            # Mission point time out, change other params
-            logging.warning('Wp timeout!')
-            return False
-        except KeyboardInterrupt:
-            logging.info('Key bordInterrupt! exit')
-            return False
-        return False
+    """
+    Thread
+    """
 
     def run(self):
         """
@@ -716,52 +699,21 @@ class CollectMavlinkPX4(DroneMavlink):
     def __init__(self, port, recv_msg_queue, send_msg_queue):
         super(CollectMavlinkPX4, self).__init__(port, recv_msg_queue, send_msg_queue)
 
-    def wait_complete(self, remain_fail=False, timeout=60 * 5):
-        if not self._master:
-            raise ValueError('Connect at first!')
-        try:
-            timeout_start = time.time()
-            while time.time() < timeout_start + timeout:
-                # PX4 needs manual send the heartbeat for GCS
-                self.gcs_msg_request()
-                message = self._master.recv_match(type=['STATUSTEXT'], blocking=False, timeout=30)
-                if message is None:
-                    continue
-                message = message.to_dict()
-                out_msg = "None"
-                line = message['text']
-                if message["severity"] == 6:
-                    if "landed" in line:
-                        # if successful landed, break the loop and return true
-                        logging.info(f"Successful break the loop.")
-                        return True
-                elif message["severity"] == 2 or message["severity"] == 0:
-                    # Appear error, break loop and return false
-                    if "SIM Hit ground at" in line:
-                        pass
-                    elif "Potential Thrust Loss" in line:
-                        pass
-                    elif "Crash" in line:
-                        pass
-                    elif "PreArm" in line:
-                        pass
-                        # will not generate log file
-                        logging.info(f"Get error with {message['text']}")
-                        return True
-                    logging.info(f"Get error with {message['text']}")
-                    if remain_fail:
-                        # Keep problem log
-                        return True
-                    else:
-                        return False
-            return False
-        except TimeoutError:
-            # Mission point time out, change other params
-            logging.warning('Wp timeout!')
-            return False
-        except KeyboardInterrupt:
-            logging.info('Key bordInterrupt! exit')
-            return False
+    """
+    Method
+    """
+
+    def gcs_msg_request(self):
+        """
+        PX4 needs manual send the heartbeat for GCS
+        :return:
+        """
+        self._master.mav.heartbeat_send(mavutil.mavlink.MAV_TYPE_GCS,
+                                        mavutil.mavlink.MAV_AUTOPILOT_INVALID, 0, 0, 0)
+
+    """
+    Static Method
+    """
 
     @classmethod
     def fill_and_process_pd_log(cls, pd_array: pd.DataFrame):
@@ -873,6 +825,7 @@ class FlyFixMavlink(DroneMavlink):
     """
     Abstract Method
     """
+
     @abstractmethod
     def init_binary_log_file(self, device_i=None):
         pass
@@ -889,6 +842,7 @@ class FlyFixMavlinkAPM(FlyFixMavlink):
     """
     Initialize Methods
     """
+
     def init_current_param(self):
         # inti param value
         accpet_param = load_param().columns.to_list()
@@ -989,11 +943,10 @@ class FlyFixMavlinkAPM(FlyFixMavlink):
 
         return df_array
 
-
-
     """
     Static Methods
     """
+
     @staticmethod
     def runtime_extract_apm(msg):
         """
@@ -1046,20 +999,22 @@ class FlyFixMavlinkAPM(FlyFixMavlink):
             }
         return out
 
-    def get_param_from_log(self, param):
-        self.flight_log.param_fetch_one(param)
-        while True:
-            message = self.flight_log.recv_match(type=['PARAM_VALUE', 'PARM'], blocking=True).to_dict()
-            if message['param_id'] == param:
-                logging.debug('name: %s\t value: %f' % (message['param_id'], message['param_value']))
-                break
-        return message['param_value']
-
-    def get_params_from_log(self, params):
-        out_dict = {}
-        for param in params:
-            out_dict[param] = DroneMavlink.get_param_from_log(param)
-        return out_dict
+    # @staticmethod
+    # def get_param_from_log(self, param):
+    #     self.flight_log.param_fetch_one(param)
+    #     while True:
+    #         message = self.flight_log.recv_match(type=['PARAM_VALUE', 'PARM'], blocking=True).to_dict()
+    #         if message['param_id'] == param:
+    #             logging.debug('name: %s\t value: %f' % (message['param_id'], message['param_value']))
+    #             break
+    #     return message['param_value']
+    #
+    # @staticmethod
+    # def get_params_from_log(self, params):
+    #     out_dict = {}
+    #     for param in params:
+    #         out_dict[param] = DroneMavlink.get_param_from_log(param)
+    #     return out_dict
 
     @staticmethod
     def get_time_index(msg):
@@ -1149,7 +1104,7 @@ class FlyFixMavlinkAPM(FlyFixMavlink):
                              f" {patch_max_loss}")
 
                 # APM threshold 2.3
-                if np.average(patch_max_loss) > 2.3 and not REPAIRED:#  and FIX_TIME < 2: # and not REPAIRED:
+                if np.average(patch_max_loss) > 2.3 and not REPAIRED:  # and FIX_TIME < 2: # and not REPAIRED:
                     detected_time = time.time()
                     self.repair_configuration(status_data)
                     repaired_time = time.time()

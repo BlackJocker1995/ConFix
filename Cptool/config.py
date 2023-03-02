@@ -73,6 +73,7 @@ class ToolConfig:
         if mode == "Ardupilot":
             # Simulation Type
             # Ardupilot : ['Airsim', 'Morse', 'Gazebo', 'SITL']
+            # PX4: ['Jmavsim', 'Gazebo]
             self.__dict__["SIM"] = "SITL"  # "Jmavsim"
 
             # Mavlink Part

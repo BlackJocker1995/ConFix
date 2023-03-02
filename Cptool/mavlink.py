@@ -78,7 +78,7 @@ class DroneMavlink(multiprocessing.Process):
         """
         if not self._master:
             logging.warning('Mavlink handler is not connect!')
-            raise ValueError('Connect at first!')
+            raise ValueError('Connect at first !')
 
         loader = mavwp.MAVWPLoader()
         loader.target_system = self._master.target_system
@@ -1271,7 +1271,7 @@ class FlyFixMavlinkPX4(FlyFixMavlink):
             self.flight_log = ULog(self.log_file)
             # inti param value
             self.init_current_param()
-            if True:
+            try:
                 # Read flight status
                 status_data = self.read_status_patch_ulg(time_last, pitch_size_s)
                 # Check landed or read failure
@@ -1305,8 +1305,8 @@ class FlyFixMavlinkPX4(FlyFixMavlink):
                     repaired_time = time.time()
                     REPAIRED = True
 
-            # except Exception as e:
-            #     logging.warning(f"{e}, then continue looping")
+            except Exception as e:
+                logging.warning(f"{e}, then continue looping")
 
             # Drop old message
             msg = self.flight_log.last_timestamp

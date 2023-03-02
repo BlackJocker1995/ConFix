@@ -1,4 +1,5 @@
 import json
+import multiprocessing
 import os
 
 import numpy as np
@@ -36,6 +37,12 @@ class Location:
             return 0
         return mavextra.distance_lat_lon(point1.x, point1.y,
                                          point2.x, point2.y)
+
+
+class OnlineBinRead(multiprocessing.Process):
+    def __init__(self, log_file):
+        super().__init__()
+        self.flight_log = mavutil.mavlink_connection(self.log_file)
 
 
 def load_param() -> json:

@@ -249,7 +249,10 @@ class DroneMavlink(multiprocessing.Process):
     def wait_complete(self):
         pass
 
-    # Static method
+
+    """
+    Static method
+    """
     @staticmethod
     def create_random_params(param_choice):
         para_dict = load_param()
@@ -279,10 +282,11 @@ class DroneMavlink(multiprocessing.Process):
         return loader
 
     @staticmethod
-    def extract_log_path(log_path, skip=True, threat=None):
+    def extract_log_path(log_path, skip=True, keep_des=False, threat=None):
         """
         extract and convert bin file to csv
-        :param skip:
+        :param keep_des: whether keep desired value of ATT and RATE
+        :param skip: whether skip a log if it has been processed.
         :param log_path:
         :param threat: multiple threat
         :return:
@@ -291,9 +295,10 @@ class DroneMavlink(multiprocessing.Process):
         # If px4, the log is ulg, if ardupilot the log is bin
         global collect_mavlink
         if toolConfig.MODE == "PX4":
-            collect_mavlink = CollectMavlinkAPM
+            collect_mavlink = CollectMavlinkPX4
             bin_type = "ulg"
         else:
+            collect_mavlink = CollectMavlinkAPM
             bin_type = "BIN"
 
         # read file first
@@ -309,7 +314,7 @@ class DroneMavlink(multiprocessing.Process):
             ray.init(include_dashboard=True, dashboard_host="127.0.0.1", dashboard_port=8088)
 
             for array in arrays:
-                threat_manage.append(collect_mavlink.extract_log_path_threat.remote(log_path, array, skip))
+                threat_manage.append(collect_mavlink.extract_log_path_threat.remote(log_path, array, keep_des, skip))
             ray.get(threat_manage)
             ray.shutdown()
         else:
@@ -320,11 +325,33 @@ class DroneMavlink(multiprocessing.Process):
                     continue
                 # extract
                 try:
-                    csv_data = collect_mavlink.extract_log_file(log_path + f'/{file}')
+                    csv_data = collect_mavlink.extract_log_file(log_path + f'/{file}', keep_des)
                     csv_data.to_csv(f'{log_path}/csv/{name}.csv', index=False)
                 except Exception as e:
                     logging.warning(f"Error processing {file} : {e}")
                     continue
+
+    @staticmethod
+    def _fill_and_process_public(pd_array: pd.DataFrame):
+        """
+        Public process of "fill_and_process_pd_log" function
+        :param pd_array:
+        :return:
+        """
+        pd_array['TimeS'] = pd_array['TimeS'].round(1)
+        pd_array = pd_array.drop_duplicates(keep='first')
+        # merge data in same TimeS
+        df_array = pd.DataFrame(columns=pd_array.columns)
+        for group, group_item in pd_array.groupby('TimeS'):
+            # fillna
+            group_item = group_item.fillna(method='ffill')
+            group_item = group_item.fillna(method='bfill')
+            df_array.loc[len(df_array.index)] = group_item.mean()
+        # Drop nan
+        df_array = df_array.fillna(method='ffill')
+        df_array = df_array.dropna()
+
+        return df_array
 
 
 class CollectMavlinkAPM(DroneMavlink):
@@ -337,29 +364,53 @@ class CollectMavlinkAPM(DroneMavlink):
 
     # Ardupilot
     @staticmethod
-    def log_extract_apm(msg: DFMessage):
+    def log_extract_apm(msg: DFMessage, keep_des=False):
         """
         parse the msg of mavlink
+        :param keep_des: whether keep att and rate desired and achieve value
         :param msg:
         :return:
         """
         out = None
         if msg.get_type() == 'ATT':
-            if len(toolConfig.LOG_MAP):
+            # if len(toolConfig.LOG_MAP):
+            if not keep_des:
+                 out = {
+                        'TimeS': msg.TimeUS / 1000000,
+                        'Roll': msg.Roll,
+                        'Pitch': msg.Pitch,
+                        'Yaw': msg.Yaw,
+                }
+            else:
                 out = {
                     'TimeS': msg.TimeUS / 1000000,
+                    "DesRoll": msg.DesRoll,
                     'Roll': msg.Roll,
+                    'DesPitch': msg.DesPitch,
                     'Pitch': msg.Pitch,
+                    'DesYaw': msg.DesYaw,
                     'Yaw': msg.Yaw,
                 }
         elif msg.get_type() == 'RATE':
-            out = {
-                'TimeS': msg.TimeUS / 1000000,
-                # deg to rad
-                'RateRoll': msg.R,
-                'RatePitch': msg.P,
-                'RateYaw': msg.Y,
-            }
+            if not keep_des:
+                out = {
+                    'TimeS': msg.TimeUS / 1000000,
+                    # deg to rad
+                    'RateRoll': msg.R,
+                    'RatePitch': msg.P,
+                    'RateYaw': msg.Y,
+                }
+            else:
+                out = {
+                    'TimeS': msg.TimeUS / 1000000,
+                    # deg to rad
+                    'DesRateRoll': msg.RDes,
+                    'RateRoll': msg.R,
+                    'DesRatePitch': msg.PDes,
+                    'RatePitch': msg.P,
+                    'DesRateYaw': msg.YDes,
+                    'RateYaw': msg.Y,
+                }
         # elif msg.get_type() == 'POS':
         #     out = {
         #         'TimeS': msg.TimeUS / 1000000,
@@ -407,22 +458,11 @@ class CollectMavlinkAPM(DroneMavlink):
             }
         return out
 
-    @staticmethod
-    def fill_and_process_pd_log(pd_array: pd.DataFrame):
+    @classmethod
+    def fill_and_process_pd_log(cls, pd_array: pd.DataFrame):
         # Remain timestamp .1 and drop duplicate
         pd_array['TimeS'] = pd_array['TimeS'].round(1)
-        pd_array = pd_array.drop_duplicates(keep='first')
-
-        # merge data in same TimeS
-        df_array = pd.DataFrame(columns=pd_array.columns)
-        for group, group_item in pd_array.groupby('TimeS'):
-            # fillna
-            group_item = group_item.fillna(method='ffill')
-            group_item = group_item.fillna(method='bfill')
-            df_array.loc[len(df_array.index)] = group_item.mean()
-        # Drop nan
-        df_array = df_array.fillna(method='ffill')
-        df_array = df_array.dropna()
+        df_array = cls._fill_and_process_public(pd_array)
 
         # Sort
         order_name = toolConfig.STATUS_ORDER.copy()
@@ -435,9 +475,10 @@ class CollectMavlinkAPM(DroneMavlink):
         return df_array
 
     @staticmethod
-    def extract_log_file(log_file):
+    def extract_log_file(log_file, keep_des=False):
         """
         extract log message form a bin file.
+        :param keep_des:
         :param log_file:
         :return:
         """
@@ -453,19 +494,19 @@ class CollectMavlinkAPM(DroneMavlink):
             if msg is None:
                 break
             if msg.get_type() in ['ATT', 'RATE']:
-                out_data.append(CollectMavlinkAPM.log_extract_apm(msg))
+                out_data.append(CollectMavlinkAPM.log_extract_apm(msg, keep_des))
             elif msg.get_type() in ['IMU', 'MAG']:
                 if hasattr(msg, "I") and msg.I == 0:
-                    out_data.append(CollectMavlinkAPM.log_extract_apm(msg))
+                    out_data.append(CollectMavlinkAPM.log_extract_apm(msg, keep_des))
                 else:
-                    out_data.append(CollectMavlinkAPM.log_extract_apm(msg))
+                    out_data.append(CollectMavlinkAPM.log_extract_apm(msg, keep_des))
             elif msg.get_type() == 'VIBE':
                 if hasattr(msg, "IMU") and msg.IMU == 0:
-                    out_data.append(CollectMavlinkAPM.log_extract_apm(msg))
+                    out_data.append(CollectMavlinkAPM.log_extract_apm(msg, keep_des))
                 else:
-                    out_data.append(CollectMavlinkAPM.log_extract_apm(msg))
+                    out_data.append(CollectMavlinkAPM.log_extract_apm(msg, keep_des))
             elif msg.get_type() == 'PARM' and msg.Name in accpet_param:
-                out_data.append(CollectMavlinkAPM.log_extract_apm(msg))
+                out_data.append(CollectMavlinkAPM.log_extract_apm(msg, keep_des))
         pd_array = pd.DataFrame(out_data)
         # Switch sequence, fill,  and return
         pd_array = CollectMavlinkAPM.fill_and_process_pd_log(pd_array)
@@ -493,21 +534,6 @@ class CollectMavlinkAPM(DroneMavlink):
         pd_array['TimeS'] = pd_array['TimeS'].round(1)
         # pd_array = pd_array.drop_duplicates(keep='first')
         return pd_array
-
-    @staticmethod
-    @ray.remote
-    def extract_log_path_threat(log_path, file_list, skip):
-        for file in tqdm(file_list):
-            name, _ = file.split('.')
-            if skip and os.path.exists(f'{log_path}/csv/{name}.csv'):
-                continue
-            try:
-                csv_data = CollectMavlinkAPM.extract_log_file(log_path + f'/{file}')
-                csv_data.to_csv(f'{log_path}/csv/{name}.csv', index=False)
-            except Exception as e:
-                logging.warning(f"Error processing {file} : {e}")
-                continue
-        return True
 
     @staticmethod
     def extract_log_file_des_and_ach(log_file):
@@ -541,6 +567,29 @@ class CollectMavlinkAPM(DroneMavlink):
         pd_array['TimeS'] = pd_array['TimeS'].round(1)
         pd_array = pd_array.drop_duplicates(keep='first')
         return pd_array
+
+    @staticmethod
+    @ray.remote
+    def extract_log_path_threat(log_path, file_list, keep_des, skip):
+        """
+        threat method to extract data from log.
+        :param log_path:
+        :param file_list:
+        :param keep_des: whether keep desired value of ATT and RATE
+        :param skip:
+        :return:
+        """
+        for file in tqdm(file_list):
+            name, _ = file.split('.')
+            if skip and os.path.exists(f'{log_path}/csv/{name}.csv'):
+                continue
+            try:
+                csv_data = CollectMavlinkAPM.extract_log_file(log_path + f'/{file}', keep_des)
+                csv_data.to_csv(f'{log_path}/csv/{name}.csv', index=False)
+            except Exception as e:
+                logging.warning(f"Error processing {file} : {e}")
+                continue
+        return True
 
     # Special function
     @staticmethod
@@ -694,26 +743,9 @@ class CollectMavlinkPX4(DroneMavlink):
             logging.info('Key bordInterrupt! exit')
             return False
 
-    @staticmethod
-    def fill_and_process_pd_log(pd_array: pd.DataFrame):
-        # Round TimesS
-        pd_array["TimeS"] = pd_array["TimeS"] / 1000000
-        pd_array['TimeS'] = pd_array['TimeS'].round(1)
-
-        pd_array = pd_array.drop_duplicates(keep='first')
-
-        # merge data in same TimeS
-        df_array = pd.DataFrame(columns=pd_array.columns)
-
-        for group, group_item in pd_array.groupby('TimeS'):
-            # fillna
-            group_item = group_item.fillna(method='ffill')
-            group_item = group_item.fillna(method='bfill')
-            df_array.loc[len(df_array.index)] = group_item.mean()
-        # Drop nan
-        df_array = df_array.fillna(method='ffill')
-        df_array = df_array.dropna()
-
+    @classmethod
+    def fill_and_process_pd_log(cls, pd_array: pd.DataFrame):
+        df_array = cls._fill_and_process_public(pd_array)
         return df_array
 
     @staticmethod

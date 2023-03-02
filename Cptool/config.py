@@ -6,6 +6,9 @@ import pandas as pd
 
 
 class ToolConfig:
+    """
+    Configuration file for both simulator, mavlink connection, and learning model。
+    """
     class ConstError(PermissionError):
         pass
 
@@ -34,7 +37,7 @@ class ToolConfig:
         # Copter LOG Path
         self.__dict__["ARDUPILOT_LOG_PATH"] = '/media/rain/data'
 
-        #--------PATH ---------#
+        # --------PATH ---------#
         # STIL
         self.__dict__["SITL_PATH"] = "/home/rain/ardupilot/Tools/autotest/sim_vehicle.py"
         # Airsim
@@ -103,10 +106,10 @@ class ToolConfig:
                 # "ATC_ANG_YAW_P",
                 # "ATC_RAT_YAW_P",
                 # "ATC_RAT_YAW_I",
-                # "ATC_RAT_YAW_D",
-                # "WPNAV_SPEED",
-                # "WPNAV_ACCEL",
-                # "ANGLE_MAX"
+                "ATC_RAT_YAW_D",
+                "WPNAV_SPEED",
+                "WPNAV_ACCEL",
+                "ANGLE_MAX"
             ]
 
             # self.__dict__["PARAM"] = [

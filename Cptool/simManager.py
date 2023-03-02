@@ -1,5 +1,5 @@
 """
-SimManager Version: 4.2 23-02-02
+SimManager Version: 4.3 23-03-02
 """
 import logging
 import math

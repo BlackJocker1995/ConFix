@@ -7,6 +7,7 @@ import random
 import time
 
 import glob
+from abc import abstractmethod
 from multiprocessing import Process
 
 import numpy as np
@@ -54,18 +55,21 @@ class DroneMavlink(multiprocessing.Process):
         wait for IMU can work
         :return:
         """
-        while True:
-            message = self._master.recv_match(type=['STATUSTEXT'], blocking=True, timeout=30)
-            # message = self._master.recv_match(blocking=True, timeout=30)
-            message = message.to_dict()["text"]
-            # print(message)
-            if toolConfig.MODE == "Ardupilot" and "IMU0 is using GPS" in message:
-                logging.debug("Ready to fly.")
-                return True
-            # print(message)
-            if toolConfig.MODE == "PX4" and "home set" in message:
-                logging.debug("Ready to fly.")
-                return True
+        try:
+            while True:
+                message = self._master.recv_match(type=['STATUSTEXT'], blocking=True, timeout=30)
+                message = message.to_dict()["text"]
+                # print(message)
+                if toolConfig.MODE == "Ardupilot" and "IMU0 is using GPS" in message:
+                    logging.debug("Ready to fly.")
+                    return True
+                # print(message)
+                if toolConfig.MODE == "PX4" and "home set" in message:
+                    logging.debug("Ready to fly.")
+                    return True
+        except Exception as e:
+            logging.debug(f"Error {e}")
+            return False
 
     def set_mission(self, mission_file, israndom: bool = False, timeout=30) -> bool:
         """
@@ -247,8 +251,48 @@ class DroneMavlink(multiprocessing.Process):
                                         mavutil.mavlink.MAV_AUTOPILOT_INVALID, 0, 0, 0)
 
     def wait_complete(self):
+        """
+        abstract
+        :return:
+        """
         pass
 
+    """
+    Internal Methods
+    """
+
+    @staticmethod
+    def _fill_and_process_public(pd_array: pd.DataFrame):
+        """
+        Public process of "fill_and_process_pd_log" function
+        :param pd_array:
+        :return:
+        """
+        pd_array['TimeS'] = pd_array['TimeS'].round(1)
+        pd_array = pd_array.drop_duplicates(keep='first')
+        # merge data in same TimeS
+        df_array = pd.DataFrame(columns=pd_array.columns)
+        for group, group_item in pd_array.groupby('TimeS'):
+            # fillna
+            group_item = group_item.fillna(method='ffill')
+            group_item = group_item.fillna(method='bfill')
+            df_array.loc[len(df_array.index)] = group_item.mean()
+        # Drop nan
+        df_array = df_array.fillna(method='ffill')
+        df_array = df_array.dropna()
+
+        return df_array
+
+    @staticmethod
+    def _order_sort(df_array):
+        order_name = toolConfig.STATUS_ORDER.copy()
+        param_seq = load_param().columns.to_list()
+        param_name = df_array.keys().difference(order_name).to_list()
+        param_name.sort(key=lambda item: param_seq.index(item))
+        # Status value + Parameter name
+        order_name.extend(param_name)
+        df_array = df_array[order_name]
+        return df_array
 
     """
     Static method
@@ -330,28 +374,6 @@ class DroneMavlink(multiprocessing.Process):
                 except Exception as e:
                     logging.warning(f"Error processing {file} : {e}")
                     continue
-
-    @staticmethod
-    def _fill_and_process_public(pd_array: pd.DataFrame):
-        """
-        Public process of "fill_and_process_pd_log" function
-        :param pd_array:
-        :return:
-        """
-        pd_array['TimeS'] = pd_array['TimeS'].round(1)
-        pd_array = pd_array.drop_duplicates(keep='first')
-        # merge data in same TimeS
-        df_array = pd.DataFrame(columns=pd_array.columns)
-        for group, group_item in pd_array.groupby('TimeS'):
-            # fillna
-            group_item = group_item.fillna(method='ffill')
-            group_item = group_item.fillna(method='bfill')
-            df_array.loc[len(df_array.index)] = group_item.mean()
-        # Drop nan
-        df_array = df_array.fillna(method='ffill')
-        df_array = df_array.dropna()
-
-        return df_array
 
 
 class CollectMavlinkAPM(DroneMavlink):
@@ -460,18 +482,16 @@ class CollectMavlinkAPM(DroneMavlink):
 
     @classmethod
     def fill_and_process_pd_log(cls, pd_array: pd.DataFrame):
+        """
+        pre-process the data collected.
+        :param pd_array:
+        :return:
+        """
         # Remain timestamp .1 and drop duplicate
         pd_array['TimeS'] = pd_array['TimeS'].round(1)
         df_array = cls._fill_and_process_public(pd_array)
-
         # Sort
-        order_name = toolConfig.STATUS_ORDER.copy()
-        param_seq = load_param().columns.to_list()
-        param_name = df_array.keys().difference(order_name).to_list()
-        param_name.sort(key=lambda item: param_seq.index(item))
-        # Status value + Parameter name
-        order_name.extend(param_name)
-        df_array = df_array[order_name]
+        df_array = cls._order_sort(df_array)
         return df_array
 
     @staticmethod
@@ -850,9 +870,14 @@ class FlyFixMavlink(DroneMavlink):
         logging.info(f"Repair configuration found and cost: {end - start} second")
         self.set_params(new_config)
 
+    """
+    Abstract Method
+    """
+    @abstractmethod
     def init_binary_log_file(self, device_i=None):
         pass
 
+    @abstractmethod
     def init_current_param(self):
         pass
 
@@ -861,6 +886,9 @@ class FlyFixMavlinkAPM(FlyFixMavlink):
     def __init__(self, port, recv_msg_queue=None, send_msg_queue=None):
         super(FlyFixMavlinkAPM, self).__init__(port, recv_msg_queue, send_msg_queue)
 
+    """
+    Initialize Methods
+    """
     def init_current_param(self):
         # inti param value
         accpet_param = load_param().columns.to_list()
@@ -871,7 +899,7 @@ class FlyFixMavlinkAPM(FlyFixMavlink):
         self.param_current.pop('TimeS')
         # logging.debug(f"Current parameters: {self.param_current}")
 
-    def init_binary_log_file(self):
+    def init_binary_log_file(self, device_i=None):
         log_index = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/LASTLOG.TXT"
         # Read last index
         with open(log_index, 'r') as f:
@@ -889,25 +917,22 @@ class FlyFixMavlinkAPM(FlyFixMavlink):
         accept_item_ex_param.remove("PARM")
         accpet_param = load_param().columns.to_list()
 
+        # Walk to the first message
         while True:
             msg = self.flight_log.recv_match(type=accept_item_ex_param)
             if msg is None:
                 return None
             elif msg.TimeUS > time_last:
+                # Get first message
+                first_msg = msg
+                first_time = self.get_time_index_bin(first_msg)
+                first_msg = CollectMavlinkAPM.log_extract_apm(first_msg)
+                logging.debug(f"Current status at {first_time} second.")
+
+                first_msg.update(self.param_current)
+                out_data.append(first_msg)
+                new_time = first_time
                 break
-
-        # Get first message
-        first_msg = self.flight_log.recv_match(type=accept_item_ex_param)
-        if first_msg is None:
-            print("return False")
-            return False
-        first_time = self.get_time_index_bin(first_msg)
-        first_msg = CollectMavlinkAPM.log_extract_apm(first_msg)
-        logging.debug(f"Current status at {first_time} second.")
-
-        first_msg.update(self.param_current)
-        out_data.append(first_msg)
-        new_time = first_time
 
         # Collect data in one time_unit
         while new_time < first_time + time_unit + 0.1:
@@ -954,31 +979,21 @@ class FlyFixMavlinkAPM(FlyFixMavlink):
         pd_array = pd.DataFrame(out_data)
 
         # Remain timestamp .1 and drop duplicate
-        pd_array['TimeS'] = pd_array['TimeS'].round(1)
-        pd_array = pd_array.drop_duplicates(keep='first')
         pd_array[toolConfig.PARAM] = pd_array[toolConfig.PARAM].fillna(method="bfill")
+        self._fill_and_process_public(pd_array)
 
-        # merge data in same TimeS
-        df_array = pd.DataFrame(columns=pd_array.columns)
-        for group, group_item in pd_array.groupby('TimeS'):
-            # fillna
-            group_item = group_item.fillna(method='ffill')
-            group_item = group_item.fillna(method='bfill')
-            df_array.loc[len(df_array.index)] = group_item.mean()
-        # Drop nan
-        df_array = df_array.fillna(method='ffill')
-        df_array = df_array.dropna()
+        pd_array['TimeS'] = pd_array['TimeS'].round(1)
+        df_array = pd_array.drop_duplicates(keep='first')
         # Order
-        order_name = toolConfig.STATUS_ORDER.copy()
-        param_seq = load_param().columns.to_list()
-        param_name = df_array.keys().difference(order_name).to_list()
-        param_name.sort(key=lambda item: param_seq.index(item))
-        # Status value + Parameter name
-        order_name.extend(param_name)
-        df_array = df_array[order_name]
+        df_array = self._order_sort(df_array)
 
         return df_array
 
+
+
+    """
+    Static Methods
+    """
     @staticmethod
     def runtime_extract_apm(msg):
         """
@@ -1123,7 +1138,6 @@ class FlyFixMavlinkAPM(FlyFixMavlink):
                 if isinstance(self.predictor, CyTCN):
                     feature_y = feature_y.reshape((feature_y.shape[0], -1))
                     predicted_feature = self.predictor.predict_feature(feature_x)
-
                     predicted_feature = predicted_feature.reshape((predicted_feature.shape[0], -1))
                 else:
                     predicted_feature = self.predictor.predict_feature(feature_x)

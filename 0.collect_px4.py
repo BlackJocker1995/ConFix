@@ -44,6 +44,5 @@ if __name__ == '__main__':
             if not result:
                 # Delete current log
                 CollectMavlinkPX4.delete_current_log()
-
         except Exception as e:
             continue

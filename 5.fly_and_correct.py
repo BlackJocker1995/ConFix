@@ -25,7 +25,7 @@ if __name__ == '__main__':
 
     mav_monitor.init_bin_log_file()
 
-    # mav_monitor.start()
+    mav_monitor.start()
     mav_monitor.online_bin_monitor()
 
     manager.stop_sitl()

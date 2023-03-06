@@ -29,6 +29,10 @@ class SimManager:
         self.sim_msg_queue = multiprocessing.Queue()
         self.mav_msg_queue = multiprocessing.Queue()
 
+        # clear previous logging handler
+        root_logger = logging.getLogger()
+        for h in root_logger.handlers[:]:
+            root_logger.removeHandler(h)
         if debug:
             logging.basicConfig(format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s',
                                 level=logging.DEBUG)

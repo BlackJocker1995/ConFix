@@ -311,7 +311,9 @@ class DroneMavlink(multiprocessing.Process):
 
     @staticmethod
     def _order_sort(df_array):
+        # read order
         order_name = toolConfig.STATUS_ORDER.copy()
+        # find parameter
         param_seq = load_param().columns.to_list()
         param_name = df_array.keys().difference(order_name).to_list()
         param_name.sort(key=lambda item: param_seq.index(item))

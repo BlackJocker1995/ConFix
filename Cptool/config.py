@@ -82,7 +82,7 @@ class ToolConfig:
             self.__dict__["OL_LOG_MAP"] = ['ATTITUDE', 'RAW_IMU', 'VIBRATION']  # 'GLOBAL_POSITION_INT'
             # Status Order
             self.__dict__["STATUS_ORDER"] = ['TimeS', 'Roll', 'Pitch', 'Yaw', 'RateRoll', 'RatePitch', 'RateYaw',
-                                             # 'Lat', 'Lng', 'Alt',
+                                             # 'DesRoll', 'DesPitch', 'DesYaw', 'DesRateRoll', 'DesRatePitch', 'DesRateYaw',
                                              'AccX', 'AccY', 'AccZ', 'GyrX', 'GyrY', 'GyrZ',
                                              'MagX', 'MagY', 'MagZ', 'VibeX', 'VibeY', 'VibeZ']
 
@@ -99,10 +99,10 @@ class ToolConfig:
                 "ATC_ANG_RLL_P",
                 "ATC_RAT_RLL_P",
                 "ATC_RAT_RLL_I",
-                # "ATC_RAT_RLL_D",
-                # "ATC_ANG_PIT_P",
-                # "ATC_RAT_PIT_P",
-                # "ATC_RAT_PIT_I",
+                "ATC_RAT_RLL_D",
+                "ATC_ANG_PIT_P",
+                "ATC_RAT_PIT_P",
+                "ATC_RAT_PIT_I",
                 # "ATC_RAT_PIT_D",
                 # "ATC_ANG_YAW_P",
                 # "ATC_RAT_YAW_P",

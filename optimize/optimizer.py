@@ -149,8 +149,8 @@ class SwarmOptimizer(DroneOptimizer):
                                                 options=options, bounds=(self.lb, self.ub))
         # Perform optimization
         best_cost, best_pos = optimizer.optimize(self.problem.function_swarm, verbose=False, iters=30)
-        best_pos = pd.DataFrame(best_pos.reshape(1,-1), columns=toolConfig.PARAM_PART)
-        return best_pos
+        configuration = self.problem.param_value2pd_single(best_pos)
+        return configuration
 
 
 class DQNOptimizer(DroneOptimizer):

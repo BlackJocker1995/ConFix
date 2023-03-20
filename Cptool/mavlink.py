@@ -243,6 +243,33 @@ class DroneMavlink(multiprocessing.Process):
         msg = self._master.recv_match(type=['COMMAND_ACK'], blocking=True, timeout=30)
         logging.debug(f"Home set callback: {msg.command}")
 
+    def send_fly_cmd(self):
+        if not self._master:
+            logging.warning('Mavlink handler is not connect!')
+            raise ValueError('Connect at first!')
+        self._master.mav.set_position_target_local_ned_send(
+                                      0,  # system time in milliseconds
+                                      self._master.target_system,  # target system
+                                      0,  # target component
+                                      8,  # coordinate frame MAV_FRAME_BODY_NED
+                                      3576,     # type mask (pos only)
+                                      0, 0, 0,  # position x,y,z
+                                      0, 0, 0,  # velocity x,y,z
+                                      0, 0, 0,  # accel x,y,z
+                                      0, 0)     # yaw, yaw rate
+        logging.debug('Send Waypoint.')
+
+    def reboot_ardupilot(self):
+        """
+        Reboot Ardupilot Not test
+        :return:
+        """
+        if not self._master:
+            logging.warning('Mavlink handler is not connect!')
+            raise ValueError('Connect at first!')
+        logging.info('Ardupilot reboot...')
+        self._master.reboot_autopilot()
+
     def gcs_msg_request(self):
         # If it requires manually send the gsc packets.
         pass

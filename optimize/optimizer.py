@@ -8,7 +8,6 @@ import pyswarms as ps
 from keras.engine.sequential import Sequential
 from keras.legacy_tf_layers.core import Dense
 from keras.optimizers.optimizer_v2.adam import Adam
-from sko.PSO import PSO
 
 from Cptool.config import toolConfig
 from Cptool.mavtool import load_param, select_sub_dict, read_unit_from_dict, read_range_from_dict, get_default_values
@@ -106,24 +105,6 @@ class GAOptimizer(DroneOptimizer):
         candidate_obj = candidate_obj[candidate_index]
 
         return self.problem.param_value2step(candidate_obj)
-
-
-class PSOOptimizer(DroneOptimizer):
-    def __init__(self):
-        super().__init__()
-
-        name = 'PSOProblem'
-        self.lb = self.sub_value_range[:, 0]  # Lower bound for decision variables
-        self.ub = self.sub_value_range[:, 1]  # Upper bound for decision variables
-        self.dim = self.sub_value_range.shape[0]  # 初始化Dim（决策变量维数）
-
-        self.problem = ProblemPSO(name)
-
-    def start_optimize(self):
-        self.pso = PSO(func=self.problem.function, n_dim=self.dim, pop=20, max_iter=20,
-                       lb=self.lb, ub=self.ub, w=0.8, c1=0.6, c2=0.6)
-        self.pso.run()
-        print('best_x is ', self.pso.gbest_x, 'best_y is', self.pso.gbest_y)
 
 
 class SwarmOptimizer(DroneOptimizer):

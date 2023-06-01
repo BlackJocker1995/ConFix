@@ -19,11 +19,10 @@ class ToolConfig:
         # Mode
         # {'PX4','Ardupilot'}
         self.__dict__["MODE"] = None
-
         # Simulation Speed
         self.__dict__["SPEED"] = 3
         # Flight home (None, AVC_plane)
-        self.__dict__["HOME"] = "AVC_plane"  # "AVC_plane"
+        self.__dict__["HOME"] = "AVC_plane"
         # Output Debug Message
         self.__dict__["DEBUG"] = True
         # Wind Speed range
@@ -37,18 +36,22 @@ class ToolConfig:
         # Copter LOG Path
         self.__dict__["ARDUPILOT_LOG_PATH"] = '/media/rain/data'
 
-        # --------PATH ---------#
-        # STIL
-        self.__dict__["SITL_PATH"] = "/home/rain/ardupilot/Tools/autotest/sim_vehicle.py"
+        # --------PATH ---------#PX4_PATH
+        self.__dict__["PX4_PATH"] = "/home/rain/PX4-Autopilot"
+        self.__dict__["ARDUPILOT_PATH"] = "/home/rain/ardupilot"
+        # SITL BIN
+        self.__dict__["SITL_BIN_PATH"] = f"{self.__dict__['ARDUPILOT_PATH']}/build/sitl/bin/ardupilot"
+        # SITL
+        self.__dict__["SITL_PATH"] = f"{self.__dict__['ARDUPILOT_PATH']}/Tools/autotest/sim_vehicle.py"
         # Airsim
         self.__dict__["AIRSIM_PATH"] = "/media/rain/data/airsim/Africa_Savannah/LinuxNoEditor/Africa_001.sh"
         # self.__dict__["AIRSIM_PATH"] = "/media/rain/data/airsim/Blocks/LinuxNoEditor/Blocks.sh"
-        # PX4 LOG Path
-        self.__dict__["PX4_RUN_PATH"] = '/home/rain/PX4-Autopilot'
         # Jmavsim Path
-        self.__dict__["JMAVSIM_PATH"] = "/home/rain/PX4-Autopilot/Tools/jmavsim_run.sh"
+        self.__dict__["JMAVSIM_PATH"] = f"{self.__dict__['PX4_PATH']}/Tools/jmavsim_run.sh"
         # Morse path
-        self.__dict__["MORSE_PATH"] = "/home/rain/ardupilot/libraries/SITL/examples/Morse/quadcopter.py"
+        self.__dict__["MORSE_PATH"] = f"{self.__dict__['ARDUPILOT_PATH']}/libraries/SITL/examples/Morse/quadcopter.py"
+        # Buffer path
+        self.__dict__["BUFFER_PATH"] = "/home/rain/nyctea/model"
 
         self.__dict__["CLUSTER_CHOICE_NUM"] = 10
 
@@ -82,7 +85,6 @@ class ToolConfig:
             self.__dict__["OL_LOG_MAP"] = ['ATTITUDE', 'RAW_IMU', 'VIBRATION']  # 'GLOBAL_POSITION_INT'
             # Status Order
             self.__dict__["STATUS_ORDER"] = ['TimeS', 'Roll', 'Pitch', 'Yaw', 'RateRoll', 'RatePitch', 'RateYaw',
-                                             # 'DesRoll', 'DesPitch', 'DesYaw', 'DesRateRoll', 'DesRatePitch', 'DesRateYaw',
                                              'AccX', 'AccY', 'AccZ', 'GyrX', 'GyrY', 'GyrZ',
                                              'MagX', 'MagY', 'MagZ', 'VibeX', 'VibeY', 'VibeZ']
 
@@ -99,10 +101,10 @@ class ToolConfig:
                 "ATC_ANG_RLL_P",
                 "ATC_RAT_RLL_P",
                 "ATC_RAT_RLL_I",
-                "ATC_RAT_RLL_D",
-                "ATC_ANG_PIT_P",
-                "ATC_RAT_PIT_P",
-                "ATC_RAT_PIT_I",
+                # "ATC_RAT_RLL_D",
+                # "ATC_ANG_PIT_P",
+                # "ATC_RAT_PIT_P",
+                # "ATC_RAT_PIT_I",
                 # "ATC_RAT_PIT_D",
                 # "ATC_ANG_YAW_P",
                 # "ATC_RAT_YAW_P",
@@ -128,7 +130,7 @@ class ToolConfig:
             now = time.localtime()
             now_time = time.strftime("%Y-%m-%d", now)
             # File path
-            self.__dict__["PX4_LOG_PATH"] = f"{self.__dict__['PX4_RUN_PATH']}/build/px4_sitl_default/logs/{now_time}"
+            self.__dict__["PX4_LOG_PATH"] = f"{self.__dict__['PX4_PATH']}/build/px4_sitl_default/logs/{now_time}"
             # Status Order
             self.__dict__["STATUS_ORDER"] = ['TimeS', 'Roll', 'Pitch', 'Yaw', 'RateRoll', 'RatePitch', 'RateYaw',
                                              'AccX', 'AccY', 'AccZ', 'GyrX', 'GyrY', 'GyrZ',
@@ -138,7 +140,6 @@ class ToolConfig:
                 param_name = pd.DataFrame(json.loads(f.read())).columns.tolist()
             self.__dict__["PARAM"] = param_name
 
-            # TODO: px4 data
             self.__dict__["PARAM_PART"] = [
                 "MC_ROLL_P",
                 "MC_PITCH_P",

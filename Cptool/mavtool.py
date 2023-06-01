@@ -1,12 +1,20 @@
 import json
 import multiprocessing
 import os
+import time
+from collections import deque
+from queue import Queue
 
 import numpy as np
 import pandas as pd
-from matplotlib import pyplot as plt
+import requests
+import scipy
+from matplotlib import pyplot as plt, mlab
 from numpy.lib.stride_tricks import sliding_window_view
 from pymavlink import mavutil, mavwp, mavextra
+from scipy.signal import savgol_filter
+from scipy.stats import norm
+
 from Cptool.config import toolConfig
 import sys, select, os
 
@@ -39,10 +47,28 @@ class Location:
                                          point2.x, point2.y)
 
 
-class OnlineBinRead(multiprocessing.Process):
-    def __init__(self, log_file):
-        super().__init__()
-        self.flight_log = mavutil.mavlink_connection(self.log_file)
+class StackBuffer:
+    def __init__(self, buffer_size):
+        self.buffer = deque()
+        self.buffer_size = buffer_size
+        self.count = 0
+
+    def append(self, obj):
+        if self.count < self.buffer_size:
+            self.buffer.append(obj)
+            self.count += 1
+        else:
+            self.buffer.popleft()
+            self.buffer.append(obj)
+
+    def get(self):
+        return self.buffer
+
+    def clear(self):
+        """ Clear buffer
+        """
+        self.buffer = deque()
+        self.count = 0
 
 
 def load_param() -> json:
@@ -163,11 +189,11 @@ def draw_att_des_and_ach_repair(pdarray, exec='pdf'):
     index = _systematicSampling(pdarray, 500)
     pdarray = pdarray.iloc[index]
     # 'AccX', 'AccY', 'AccZ',
-    plt.rcParams['font.sans-serif']=['SimHei']
+    plt.rcParams['font.sans-serif'] = ['SimHei']
 
     plt.rcParams['axes.unicode_minus'] = False
 
-    repair_line = 332 # real 332 ; thrust 305
+    repair_line = 332  # real 332 ; thrust 305
 
     for name in ['Roll', 'Pitch', 'Yaw']:
         x = pdarray[name].to_numpy()
@@ -192,9 +218,9 @@ def draw_att_des_and_ach_repair(pdarray, exec='pdf'):
         ax1.plot(x, '--', label='期望的', linewidth=2)
         ax1.set_xlabel("时间戳 (0.1 秒)", fontsize=18)
         ax1.set_ylabel(f'{name} (deg)', fontsize=18)
-        ax1.annotate('整改上传', xy=(repair_line, x.min()+mid*0.5),
-                     xytext=(repair_line+pdarray.shape[0] * 0.1, x.min()+mid*0.5),
-                     arrowprops=dict(arrowstyle="->", color="r", hatch='*',), fontsize='16')
+        ax1.annotate('整改上传', xy=(repair_line, x.min() + mid * 0.5),
+                     xytext=(repair_line + pdarray.shape[0] * 0.1, x.min() + mid * 0.5),
+                     arrowprops=dict(arrowstyle="->", color="r", hatch='*', ), fontsize='16')
 
         ax2.bar(np.arange(len(x)), loss, label='差距', color='tab:cyan')
         ax2.set_ylim([0, 10 * np.max(np.abs(x - y))])
@@ -252,6 +278,60 @@ def draw_att_des_and_ach(pdarray, exec='pdf'):
         # plt.clf()
 
 
+def extract_log_file_des_and_ach(log_file):
+    """
+    extract log message form a bin file with att desired and achieved
+    :param log_file:
+    :return:
+    """
+
+    logs = mavutil.mavlink_connection(log_file)
+    # init
+    out_data = []
+
+    while True:
+        msg = logs.recv_match(type=["ATT", "RATE"])
+        if msg is None:
+            break
+        if msg.get_type() == "ATT":
+            out = {
+                'TimeS': msg.TimeUS / 1000000,
+                'Roll': msg.Roll,
+                'DesRoll': msg.DesRoll,
+                'Pitch': msg.Pitch,
+                'DesPitch': msg.DesPitch,
+                'Yaw': msg.Yaw,
+                'DesYaw': msg.DesYaw
+            }
+        else:
+            out = {
+                'TimeS': msg.TimeUS / 1000000,
+                # deg to rad
+                'DesRateRoll': msg.RDes,
+                'RateRoll': msg.R,
+                'DesRatePitch': msg.PDes,
+                'RatePitch': msg.P,
+                'DesRateYaw': msg.YDes,
+                'RateYaw': msg.Y,
+            }
+        out_data.append(out)
+
+    pd_array = pd.DataFrame(out_data)
+    pd_array['TimeS'] = pd_array['TimeS'].round(1)
+    pd_array = pd_array.drop_duplicates(keep='first')
+    # merge data in same TimeS
+    df_array = pd.DataFrame(columns=pd_array.columns)
+    for group, group_item in pd_array.groupby('TimeS'):
+        # filling
+        group_item = group_item.fillna(method='ffill')
+        group_item = group_item.fillna(method='bfill')
+        df_array.loc[len(df_array.index)] = group_item.mean()
+    # Drop nan
+    df_array = df_array.fillna(method='ffill')
+    df_array = df_array.dropna()
+    return df_array
+
+
 def sort_result_detect_repair(result_time, detect_time, repair_time):
     """
     check whether the result is appear after detecting and repairing.
@@ -265,3 +345,12 @@ def sort_result_detect_repair(result_time, detect_time, repair_time):
     if result_time > detect_time:
         return "detect"
     return "miss"
+
+
+
+
+
+def send_notice(thread, buffer_len, content):
+    url = f"http://iyuu.cn/IYUU5945T5e031af7ab34a0248e4ed4318d9c126efd285bd0.send?text=" \
+          f"Nyctea-{thread}错误&desp=Buffer-{buffer_len}-{content}"
+    requests.request("GET", url)

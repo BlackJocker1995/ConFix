@@ -5,9 +5,9 @@ import geatpy as ea
 import numpy as np
 import pandas as pd
 import pyswarms as ps
-from keras.engine.sequential import Sequential
-from keras.legacy_tf_layers.core import Dense
-from keras.optimizers.optimizer_v2.adam import Adam
+from keras import Sequential
+from keras.layers import Dense
+from keras.optimizers import Adam
 
 from Cptool.config import toolConfig
 from Cptool.mavtool import load_param, select_sub_dict, read_unit_from_dict, read_range_from_dict, get_default_values

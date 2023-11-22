@@ -8,8 +8,8 @@ from Cptool.mavlink import MavlinkAPM
 from Cptool.simManager import FixSimManager
 
 # Create txt if not exists
-def least():
-    log_index = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/LASTLOG.TXT"
+def least(device):
+    log_index = f"{toolConfig.ARDUPILOT_LOG_PATH}/drone{device}/logs/LASTLOG.TXT"
     with open(log_index, 'r') as f:
         i = int(f.readline())
     return i
@@ -25,8 +25,8 @@ if __name__ == '__main__':
 
     # Manager
     manager = FixSimManager(debug=toolConfig.DEBUG)
-    while least() < 500:
-        log_index = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/LASTLOG.TXT"
+    while least(device) < 500:
+        log_index = f"{toolConfig.ARDUPILOT_LOG_PATH}/drone{device}/logs/LASTLOG.TXT"
         if os.path.exists(log_index):
             with open(log_index, 'r') as f:
                 num = int(f.readline())

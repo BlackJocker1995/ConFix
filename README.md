@@ -1,6 +1,6 @@
-# LGDFix
+# ConFix
 
-This is an approach source code of LGDFix.
+This is an approach source code of ConFix.
 
 ## Requirement
 Python package requirement: numpy ; pandas ; pymavlink ; pyulog ; keras ; tensorflow

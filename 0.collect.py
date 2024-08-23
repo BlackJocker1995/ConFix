@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+import time
 from datetime import datetime
 
 from Cptool.config import toolConfig
@@ -61,8 +62,17 @@ if __name__ == '__main__':
 
         manager.online_mavlink.reset_params()
 
-        manager.stop_sitl()
+        manager.kill_by_port(5760 + (int(device) *10))
 
+        # while True:
+        #     time.sleep(1)
+        # # delete bad
         if not result:
             # Delete current log
             manager.board_mavlink.delete_current_log(device)
+
+        # delete good
+        # if result:
+        #     # Delete current log
+        #     manager.board_mavlink.delete_current_log(device)
+

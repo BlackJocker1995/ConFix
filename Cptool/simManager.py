@@ -11,6 +11,7 @@ from typing import Type
 import pexpect
 from pexpect import spawn
 from pymavlink import mavwp
+from ray.thirdparty_files import psutil
 
 from Cptool.boardMavlink import BoardMavlink, BoardMavlinkAPM, BoardMavlinkPX4
 from Cptool.config import toolConfig
@@ -18,6 +19,22 @@ from Cptool.mavlink import DroneMavlink
 from Cptool.mavtool import Location
 from Cptool.monitor import MonitorFlight
 from Cptool.simSimulator import SimSimulator
+
+
+def check_and_create_dir(dir_path):
+    """
+    Check path exist
+    :param dir_path:
+    :return:
+    """
+    # Check if the file exists
+    if not os.path.isfile(dir_path):
+        # Get the directory of the file
+        directory = os.path.dirname(dir_path)
+
+        # Create the directory if it does not exist
+        if not os.path.exists(directory):
+            os.makedirs(directory)
 
 
 class SimManager:
@@ -161,10 +178,14 @@ class SimManager:
         :return:
         """
         if toolConfig.MODE == 'Ardupilot':
-            if os.path.exists(f"{toolConfig.ARDUPILOT_LOG_PATH}/drone{drone_i}/eeprom.bin"):
-                os.remove(f"{toolConfig.ARDUPILOT_LOG_PATH}/drone{drone_i}/eeprom.bin")
-            if os.path.exists(f"{toolConfig.ARDUPILOT_LOG_PATH}/drone{drone_i}/mav.parm"):
-                os.remove(f"{toolConfig.ARDUPILOT_LOG_PATH}/drone{drone_i}/mav.parm")
+            # check dir
+            flight_dir = f"{toolConfig.ARDUPILOT_LOG_PATH}/drone{drone_i}"
+            check_and_create_dir(flight_dir)
+
+            if os.path.exists(f"{flight_dir}/eeprom.bin"):
+                os.remove(f"{flight_dir}/eeprom.bin")
+            if os.path.exists(f"{flight_dir}/mav.parm"):
+                os.remove(f"{flight_dir}/mav.parm")
 
             if toolConfig.HOME is not None:
                 cmd = f"python3 {toolConfig.SITL_PATH} --location={toolConfig.HOME} " \
@@ -175,11 +196,10 @@ class SimManager:
                       f"--out=127.0.0.1:1455{drone_i} --out=127.0.0.1:1454{drone_i} --out=127.0.0.1:1456{drone_i} " \
                       f"-v ArduCopter -w -S {toolConfig.SPEED} --instance {drone_i}"
 
-            self._sitl_task = (pexpect.spawn(cmd, cwd=f"{toolConfig.ARDUPILOT_LOG_PATH}/drone{drone_i}",
+            self._sitl_task = (pexpect.spawn(cmd, cwd=flight_dir,
                                              timeout=30, encoding='utf-8'))
 
         if toolConfig.MODE == 'PX4':
-
             if os.path.exists(
                     f"{toolConfig.PX4_PATH}/build/px4_sitl_default/instance_{drone_i}/eeprom/parameters_10016") \
                     and toolConfig.MODE == "PX4":
@@ -295,6 +315,13 @@ class SimManager:
         self._sitl_task.close(force=True)
         logging.info('Stop SITL task.')
 
+    def kill_by_port(self, port):
+        for conn in psutil.net_connections():
+            if conn.laddr.port == port and conn.status == 'LISTEN':
+                p = psutil.Process(conn.pid)
+                print(p)
+                p.terminate()
+
     def stop_sim(self):
         self._sim_task.sendcontrol('c')
         self._sim_task.close(force=True)
@@ -309,6 +336,12 @@ class SimManager:
 
     def airsim_task(self) -> spawn:
         return self._sim_task
+
+    # check
+
+    # 使用示例
+    file_path = 'path/to/your/file.txt'  # 替换为你想要的文件路径
+    check_and_create_file(file_path)
 
 
 class FixSimManager(SimManager, multiprocessing.Process):

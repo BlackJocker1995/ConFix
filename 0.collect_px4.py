@@ -5,15 +5,8 @@ import time
 from datetime import datetime
 
 from Cptool.config import toolConfig
-from Cptool.mavlink import MavlinkAPM
+from Cptool.mavlink import MavlinkAPM, MavlinkPX4
 from Cptool.simManager import FixSimManager
-
-# Create txt if not exists
-def least():
-    log_index = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/LASTLOG.TXT"
-    with open(log_index, 'r') as f:
-        i = int(f.readline())
-    return i
 
 if __name__ == '__main__':
     toolConfig.select_mode("PX4")
@@ -29,20 +22,16 @@ if __name__ == '__main__':
 
     # Manager
     manager = FixSimManager(debug=toolConfig.DEBUG)
-    while least() < 500:
-        log_index = f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/LASTLOG.TXT"
-        if os.path.exists(log_index):
-            with open(log_index, 'r') as f:
-                num = int(f.readline())
+    for i in range(500):
         print('--------------------------------------------------------------------------------------------------')
-        print(f'--------- {datetime.now()} === lastindex: {num}----------------------')
+        print(f'--------- {datetime.now()} ===----------------------')
         print('--------------------------------------------------------------------------------------------------')
 
         # init environment
         manager.start_multiple_sitl(device)
-
-        manager.online_mavlink_init(MavlinkAPM, device)
-        manager.mav_monitor_init(int(14560) + int(device))
+        manager.start_multiple_sim(device)
+        manager.online_mavlink_init(MavlinkPX4, device)
+        manager.mav_monitor_init(int(14030) + int(device))
         manager.board_mavlink_init()
 
         if toolConfig.HOME is None:
@@ -68,6 +57,10 @@ if __name__ == '__main__':
 
         manager.stop_sitl()
 
-        if not result:
+        # if not result:
+        #     # Delete current log
+        #     manager.board_mavlink.delete_current_log(device)
+        # keep unstable only
+        if result:
             # Delete current log
             manager.board_mavlink.delete_current_log(device)

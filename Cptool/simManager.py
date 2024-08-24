@@ -181,8 +181,7 @@ class SimManager:
         if toolConfig.MODE == 'PX4':
 
             if os.path.exists(
-                    f"{toolConfig.PX4_PATH}/build/px4_sitl_default/instance_{drone_i}/eeprom/parameters_10016") \
-                    and toolConfig.MODE == "PX4":
+                    f"{toolConfig.PX4_PATH}/build/px4_sitl_default/instance_{drone_i}/eeprom/parameters_10016"):
                 os.remove(
                     f"{toolConfig.PX4_PATH}/build/px4_sitl_default/instance_{drone_i}/eeprom/parameters_10016")
 

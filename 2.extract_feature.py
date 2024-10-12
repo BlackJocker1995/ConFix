@@ -5,9 +5,9 @@ from ModelFit.approximate import CyLSTM, CyTCN
 Train LSTM Model
 """
 if __name__ == '__main__':
-    # pd_csv = CyLSTM.merge_file_data(f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/bin_train/csv")
-    #
-    # CyLSTM.fit_trans(pd_csv)
+    pd_csv = CyLSTM.merge_file_data(f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/bin_train/csv")
+
+    CyLSTM.fit_trans(pd_csv)
     tcn = CyTCN(100, 512)
     feature = tcn.extract_feature(f"{toolConfig.ARDUPILOT_LOG_PATH}/logs/bin_train/csv")
     # Save
